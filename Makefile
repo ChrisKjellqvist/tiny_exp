@@ -14,5 +14,5 @@ reports/%.timing.rpt: src/%.v
 	genus -batch -files scripts/synth.tcl 
 
 clean:
-	@rm -rf reports/*
+	@rm -rf reports/* genus*
 
