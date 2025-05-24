@@ -3,7 +3,6 @@ module Exp (
 	input clk,
 	input [15:0] data_i,
 	output [15:0] data_o);
-
 reg [15:0] in_flop;
 reg [15:0] out_flop;
 wire data_s = in_flop[15];
@@ -16,15 +15,24 @@ reg [22:0] offset_mul;
 wire hi = data_e > 131;
 wire lo = data_e <= 122;
 assign data_o = out_flop;
-// exponents in FP are really E+127, so e=0 is really E=127
 always @(posedge clk) begin
 	in_flop <= data_i;
 	if (hi) begin
-		out_flop <= 16'h7f80;
+	    if (data_s) begin
+		    out_flop <= 16'h7f80;
+		end
 	end else if (lo) begin
-		out_flop <= 16'h0000;
+		out_flop <= 16'38f0;
 	end else begin
 		case (data_e)
+		    121: begin
+		        base = 16'h3f82;
+		        offset = 2;
+		    end
+		    122: begin
+		        base = 16'h3f84;
+		        offset = 4;
+            end
 			123: begin
 				base = 16'h3F88;
 				offset = 9;
@@ -61,6 +69,14 @@ always @(posedge clk) begin
 				base = 16'h4b07;
 				offset = 2952;
 			end
+			132: begin
+			    base = 16'h568f;
+			    offset = 5906;
+            end
+            133: begin
+                base = 16'h6da1;
+                offset = 11817;
+            end
 		endcase
 		offset_mul = data_m * offset;
 		out_flop <= base + offset_mul[22:7];
