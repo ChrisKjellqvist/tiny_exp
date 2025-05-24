@@ -1,7 +1,6 @@
 
 module Exp (
   input clk,
-  input rst,
   input [15:0] data_i,
   output [15:0] data_o);
 
