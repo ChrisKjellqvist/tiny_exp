@@ -11,6 +11,8 @@ wire data_m = data_i[6:0];
 
 reg [15:0] base;
 reg [15:0] offset;
+wire [22:0] offset_mul = offset * data_m;
+assign data_o = base + offset[22:7]; 
 // exponents in FP are really E+127, so e=0 is really E=127
 always @(posedge clk) begin
   if (data_e <= 122) begin
