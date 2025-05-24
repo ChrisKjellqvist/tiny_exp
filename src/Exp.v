@@ -22,7 +22,7 @@ always @(posedge clk) begin
 		    out_flop <= 16'h7f80;
 		end
 	end else if (lo) begin
-		out_flop <= 16'38f0;
+		out_flop <= 16'h38f0;
 	end else begin
 		case (data_e)
 		    121: begin
