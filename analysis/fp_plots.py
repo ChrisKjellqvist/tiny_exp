@@ -9,7 +9,6 @@ unit = lambda x: x
 
 
 def gelu(q):
-    # return float((x * 0.5) * (1 + std::erf(x / M_SQRT2)));
     return (q * 0.5) * (1 + ma.erf(q / ma.sqrt(2)))
 
 
