@@ -31,5 +31,6 @@ syn_generic
 syn_map
 syn_opt
 
-report_timing -nworst 5 > reports/$toplevel.rpt 
+report_timing -nworst 5 > reports/$toplevel.timing.rpt
+report_area > reports/$toplevel.area.rpt
 write_hdl > reports/$toplevel.netlist.v
