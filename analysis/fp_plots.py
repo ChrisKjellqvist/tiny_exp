@@ -76,7 +76,7 @@ def x_map_ar(x):
     return np.array([x_map(xp) for xp in x])
 
 
-SIGN = lambda __x: __x
+SIGN = lambda __x: -__x
 x_e_min = -6
 x_e_max = 6
 
@@ -87,8 +87,6 @@ for x_ in range(x_e_min, x_e_max + 1):
     _, fhi_e, fhi_m = unpack_float(f(SIGN(2 ** (x_ + 1))))
     d_lookup[x_] = fhi_e - flo_e + fhi_m - flo_m
     q = hex((int(flo_e) + 127) * 128 + int(flo_m * 128))[2:]
-    # print(f"  BASE[{SIGN(2)}**{x_}]= 16'h{q}")
-    # print(f"OFFSET[{SIGN(2)}**{x_}]={d_lookup[x_]*128}")
     print(f"  BASE[{x_+127}]= 16'h{q}")
     print(f"OFFSET[{x_+127}]={d_lookup[x_]*128}")
 
