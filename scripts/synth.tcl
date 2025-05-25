@@ -26,6 +26,10 @@ set_output_delay -clock clk -min -max 0 data_o
 
 # uncomment this if you want retiming
 # set_db design:$toplevel .retime true
+set_db .syn_global_effort high
+set_db .syn_map_effort high
+set_db .syn_opt_effort high
+set_db .syn_generic_effort high
 
 syn_generic
 syn_map
