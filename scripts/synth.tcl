@@ -13,7 +13,7 @@ read_hdl -language sv src/$toplevel.v
 # elaborate
 elaborate $toplevel
 
-set ghz 6
+set ghz 4
 # constraints
 set clock_period [expr 1.0/$ghz]
 create_clock -name clk -period $clock_period clk
