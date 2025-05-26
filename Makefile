@@ -11,7 +11,15 @@ src/Exp_LUT.v: src/generate_direct_lut.cc
 
 reports/%.timing.rpt: src/%.v
 	echo "set toplevel $(basename $(notdir $^))" > prop.tcl
-	genus -batch -files scripts/synth.tcl 
+	genus -log logs/genus -batch -files scripts/synth.tcl 
+
+.PHONY: invs genus all
+invs:
+	innovus -log logs/innovus
+
+genus:
+	genus -log logs/genus
 
 clean:
-	@rm -rf reports/* genus* src/Exp_LUT.v fv build prop.tcl
+	@rm -rf genus* src/Exp_LUT.v fv build prop.tcl scheduling*
+

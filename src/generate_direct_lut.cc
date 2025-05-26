@@ -8,18 +8,18 @@
 #include <cinttypes>
 
 auto prefix = "module Exp_LUT(\n"
-              "    input clock,\n"
-              "    input [15:0] x,\n"
-              "    output [15:0] y\n"
+              "    input clk,\n"
+              "    input [15:0] data_i,\n"
+              "    output [15:0] data_o\n"
               ");\n"
               "\n"
               "(* rom_style = \"distributed\" *) reg [15:0] y_r;\n"
 	      "reg [15:0] x_flop;\n"
-              "assign y = y_r;\n"
+              "assign data_o = y_r;\n"
               "wire [7:0] exp = x_flop[14:7];\n"
               "wire sign = x_flop[15];"
-              "always @(posedge clock) begin\n"
-	      "    x_flop <= x;\n" 
+              "always @(posedge clk) begin\n"
+	      "    x_flop <= data_i;\n" 
               "    if (exp >= 134) begin\n"
               "        if (sign) begin\n"
               "            y_r <= 0;\n"
@@ -45,7 +45,7 @@ int main() {
     }
   }
   fprintf(f, "         endcase\n"
-             "     end"
+             "     end\n"
              "end\n"
              "endmodule\n");
   fclose(f);

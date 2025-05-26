@@ -26,120 +26,121 @@ always @(posedge clk) begin
 	end else begin
 		case (data_e)
 			121: begin
-			    if (!data_s) begin
-                    base = 16'h3f82;
-                    offset = 2;
-                end else begin
-                    base = 16'h3f7c;
-                    offset = 4;
-                end
+				if (!data_s) begin
+					base = 16'h3f82;
+					offset = 2;
+				end else begin
+					base = 16'h3f7c;
+					offset = 4;
+				end
 			end
 			122: begin
-			    if (!data_s) begin
-                    base = 16'h3f84;
-                    offset = 4;
-                end else begin
-                    base = 16'h3f78;
-                    offset = 8;
-                end
+				if (!data_s) begin
+					base = 16'h3f84;
+					offset = 4;
+				end else begin
+					base = 16'h3f78;
+					offset = 8;
+				end
 			end
 			123: begin
-			    if (!data_s) begin
-                    base = 16'h3F88;
-                    offset = 9;
-                end else begin
-                    base = 15'h3f70;
-                    offset = 15;
-                end
+				if (!data_s) begin
+					base = 16'h3F88;
+					offset = 9;
+				end else begin
+					base = 15'h3f70;
+					offset = 15;
+				end
 			end
 			124: begin
-			    if (!data_s) begin
-                    base = 16'h3f91;
-                    offset = 19;
-			    end else begin
-			        base = 16'h3f61;
-			        offset = 26;
-			    end
+				if (!data_s) begin
+					base = 16'h3f91;
+					offset = 19;
+				end else begin
+					base = 16'h3f61;
+					offset = 26;
+				end
+			end
 			125: begin
-			    if (!data_s) begin
-                    base = 16'h3fa4;
-                    offset = 47;
-                end else begin
-                    base = 16'h3f47;
-                    offset = 44;
-                end
+				if (!data_s) begin
+					base = 16'h3fa4;
+					offset = 47;
+				end else begin
+					base = 16'h3f47;
+					offset = 44;
+				end
 			end
 			126: begin
-			    if (!data_s) begin
-                    base = 16'h3fd3;
-                    offset = 90;
-                end else begin
-                    base = 16'h3f1b;
-                    offset = 95;
-                end
+				if (!data_s) begin
+					base = 16'h3fd3;
+					offset = 90;
+				end else begin
+					base = 16'h3f1b;
+					offset = 95;
+				end
 			end
 			127: begin
-			    if (!data_s) begin
-                    base = 16'h402d;
-                    offset = 191;
-                end else begin
-                    base = 16'h3ebc;
-                    offset = 178;
-                end
+				if (!data_s) begin
+					base = 16'h402d;
+					offset = 191;
+				end else begin
+					base = 16'h3ebc;
+					offset = 178;
+				end
 			end
 			128: begin
-			    if (!data_s) begin
-                    base = 16'h40ec;
-                    offset = 366;
-                end else begin
-                    base = 16'h3e0a;
-                    offset = 372;
-                end
+				if (!data_s) begin
+					base = 16'h40ec;
+					offset = 366;
+				end else begin
+					base = 16'h3e0a;
+					offset = 372;
+				end
 			end
 			129: begin
-			    if (!data_s) begin
-                    base = 16'h425a;
-                    offset = 736;
-                end else begin
-                    base = 16'h3c96;
-                    offset = 743;
-                end
+				if (!data_s) begin
+					base = 16'h425a;
+					offset = 736;
+				end else begin
+					base = 16'h3c96;
+					offset = 743;
+				end
 			end
 			130: begin
-			    if (!data_s) begin
-                    base = 16'h453a;
-                    offset = 1485;
-                end else begin
-                    base = 16'h39af;
-                    offset = 1470;
-                end
+				if (!data_s) begin
+					base = 16'h453a;
+					offset = 1485;
+				end else begin
+					base = 16'h39af;
+					offset = 1470;
+				end
 			end
 			131: begin
-			    if (!data_s) begin
-                    base = 16'h4b07;
-                    offset = 2952;
-                end else begin
-                    base = 16'h33f1;
-                    offset = 2957;
-                end
+				if (!data_s) begin
+					base = 16'h4b07;
+					offset = 2952;
+				end else begin
+					base = 16'h33f1;
+					offset = 2957;
+				end
 			end
 			132: begin
-			    if (!data_s) begin
-                    base = 16'h568f;
-                    offset = 5906;
-                end else begin
-                    base = 16'h2864;
-                    offset = 5913;
-                end
+				if (!data_s) begin
+					base = 16'h568f;
+					offset = 5906;
+				end else begin
+					base = 16'h2864;
+					offset = 5913;
+				end
 			end
 			133: begin
-			    if (!data_s) begin
-                    base = 16'h6da1;
-                    offset = 11817;
-                end else begin
-                    base = 16'h114b;
-                    offset = 11818;
-                end
+				if (!data_s) begin
+					base = 16'h6da1;
+					offset = 11817;
+				end else begin
+					base = 16'h114b;
+					offset = 11818;
+				end
 			end
 		endcase
 		offset_mul = data_m * offset;
