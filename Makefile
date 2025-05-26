@@ -9,6 +9,8 @@ src/Exp_LUT.v: src/generate_direct_lut.cc
 	$(CXX) $(CXXFLAGS) src/generate_direct_lut.cc -o build/generate_direct_lut
 	cd src && ../build/generate_direct_lut
 
+
+
 reports/%.timing.rpt: src/%.v
 	echo "set toplevel $(basename $(notdir $^))" > prop.tcl
 	genus -log logs/genus -batch -files scripts/synth.tcl 
