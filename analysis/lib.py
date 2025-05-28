@@ -70,6 +70,8 @@ def get_approx(x):
         return 0
     elif x == float("inf"):
         return float("inf")
+    elif x == float("nan"):
+        return float("nan")
     s, e, m = unpack_float(x)
     assert (m < 1)
     if e < x_e_min:
