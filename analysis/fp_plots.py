@@ -76,9 +76,9 @@ def x_map_ar(x):
     return np.array([x_map(xp) for xp in x])
 
 
-SIGN = lambda __x: -__x
-x_e_min = -6
-x_e_max = 6
+SIGN = lambda __x: __x
+x_e_min = 0
+x_e_max = 0
 
 _, lim_y_e, lim_y_m = unpack_float(f(SIGN(2 ** x_e_min)))
 d_lookup = {}
@@ -114,14 +114,19 @@ def get_approx(x):
 
 
 def plot_discontinuous_f_on(x, fapprox, fgold):
-    xticks = [f"2{to_sup(str(i))}" for i in range(x_e_min, x_e_max + 1)]
-    ax.set_xticks(range(x_e_min, x_e_max + 1), labels=xticks)
-    ax2.set_xticks(range(x_e_min, x_e_max + 1), labels=xticks)
+    xticks = [f"2{to_sup(str(i))}" for i in range(x_e_min, x_e_max + 2)]
+    ax.set_xticks(range(x_e_min, x_e_max + 2), labels=xticks)
+    ax2.set_xticks(range(x_e_min, x_e_max + 2), labels=xticks)
     ax.set_yticks(range(-50, 50))
-    ax2.set_yticks(np.arange(0, 1, 1.0 / 128), labels="")
+    # ax2.set_yticks(np.arange(0, 1, 1.0 / 128), labels="")
     ax.grid(True)
     ax2.grid(True)
     ax3.grid(True)
+    ax4.grid(True)
+    ax.set_ylabel("Output Exponent")
+    ax2.set_ylabel("Output Mantissa")
+    ax3.set_ylabel("Error (distance)")
+    ax4.set_ylabel("Error (%)")
     current_gold = None
     current_approx = None
     e_pts = []
@@ -150,7 +155,7 @@ def plot_discontinuous_f_on(x, fapprox, fgold):
         errl1 += diff
         err += diff ** 2
         err_pts.append(diff * 128)
-        err_real_pts.append(np.abs(y_approx - y_gold) / y_gold)
+        err_real_pts.append(np.abs(y_approx - y_gold) / y_gold * 100)
         err_x_pts.append(x_i)
 
         if diff > biggest_diff:
@@ -160,7 +165,7 @@ def plot_discontinuous_f_on(x, fapprox, fgold):
         # print(x_i, y_gold, y_approx)
         if current_gold != e_gold:
             if current_gold is not None:
-                ax.plot(x_pts, e_pts, marker='.', markersize=4, color='black')
+                ax.plot(x_pts, e_pts, marker='.', markersize=4, color='black', label="Baseline")
                 ax2.plot(x_pts, m_pts, marker='.', markersize=4, color='black')
             current_gold = e_gold
             for a in [e_pts, x_pts, m_pts]:
@@ -171,7 +176,8 @@ def plot_discontinuous_f_on(x, fapprox, fgold):
 
         if current_approx != e_approx:
             if current_approx is not None:
-                ax.plot(x_approx_pts, e_approx_pts, marker='.', markersize=2, color='red')
+                ax.plot(x_approx_pts, e_approx_pts, marker='.', markersize=2, color='red', label="Approx.")
+                ax.legend()
                 ax2.plot(x_approx_pts, m_approx_pts, marker='.', markersize=2, color='red')
             current_approx = e_approx
             for a in [e_approx_pts, x_approx_pts, m_approx_pts]:
@@ -179,9 +185,9 @@ def plot_discontinuous_f_on(x, fapprox, fgold):
         x_approx_pts.append(xm)
         e_approx_pts.append(e_approx)
         m_approx_pts.append(m_approx / 128)
-    ax.plot(x_pts, e_pts, marker='.', markersize=4, color='black')
+    ax.plot(x_pts, e_pts, marker='.', markersize=4, color='black', label="Baseline")
     ax2.plot(x_pts, m_pts, marker='.', markersize=4, color='black')
-    ax.plot(x_approx_pts, e_approx_pts, marker='.', markersize=2, color='red')
+    ax.plot(x_approx_pts, e_approx_pts, marker='.', markersize=2, color='red', label="Approx")
     ax2.plot(x_approx_pts, m_approx_pts, marker='.', markersize=2, color='red')
 
     ax3.plot(err_x_pts, err_pts)
@@ -193,7 +199,7 @@ def plot_discontinuous_f_on(x, fapprox, fgold):
         window = err_real_pts[i - window_sz:i + 1:window_sz]
         mv_real.append(sum(window) / len(window))
         mv_x.append(err_x_pts[i])
-    ax4.plot(mv_x, mv_real, label=f"error (moving avg {window_sz})")
+    # ax4.plot(mv_x, mv_real, label=f"error (moving avg {window_sz})")
     print(f"L1: {errl1 / len(x) * 128}")
     print(f"L2: {(err ** .5) / len(x) * 128}")
 
@@ -219,70 +225,19 @@ def to_sup(a: str):
         return ""
 
 
-fig, axs = plt.subplots(1, 4, figsize=(20, 10), dpi=800)
-############### EXP + #####################
-ax, ax2, ax3, ax4 = axs
-ax.set_title("EXPONENT EXP +")
-ax2.set_title("MANTISSA EXP +")
-ax3.set_title("ERROR (BITS)")
-ax4.set_title("ERROR (REAL)")
-plot_discontinuous_f_on(x, get_approx, f)
-fig.savefig('nonlinear-figs1.pdf')
-
-# ############## EXP - ##################
-# ax, ax2, ax3 = get_and_init(1)
-# f = np.exp
-# ax.set_title("EXPONENT EXP -")
-# ax2.set_title("MANTISSA EXP -")
-# plot_f(x, f)
-#
-# fig.tight_layout()
-#
-# fig, axs = plt.subplots(2, 3, figsize=(15, 10), dpi=800)
-# ################## GELU #####################
-# f = gelu
-# ax, ax2, ax3 = get_and_init(0)
-# ax.set_title("EXPONENT GELU")
-# ax2.set_title("MANTISSA GELU")
-# # plot_f(x, unit, c_="gray", linestyle='--', linewidth=2)
-# # plot_f(-x, unit, c_="gray", linestyle='--', linewidth=2)
-# plot_f(x, f, do_approx=True)
-# # plot_f(np.arange(d, x_max, d), f, c_="black")
-#
-#
-# ################## GELU MOD #################
-# f = gelu_mod
-# ax, ax2, ax3 = get_and_init(1)
-# ax.set_title("EXPONENT GELU MOD")
-# ax2.set_title("MANTISSA GELU MOD")
-# plot_f(-x, f, c_="red")
-# plot_f(x, f, c_="black", do_approx=True)
-#
-# fig.tight_layout()
-# fig.savefig('nonlinear-figs2.pdf')
-#
-# fig, axs = plt.subplots(2, 2, figsize=(7.5, 10), dpi=800)
-# x = np.arange(-4, 4, 0.01)
-# ax = axs[0][0]
-# y = np.exp(x)
-# ax.plot(x, y)
-# ax.grid(True)
-# ax.set_title("EXP")
-# ax = axs[0][1]
-# y = [gelu(q) for q in x]
-# ax.plot(x, y)
-# ax.grid(True)
-# ax.set_title("GELU")
-# ax = axs[1][0]
-# y = [relu(q) for q in x]
-# ax.plot(x, y)
-# ax.grid(True)
-# ax.set_title("RELU")
-# ax = axs[1][1]
-# y = [relu(q) - gelu(q) for q in x]
-# ax.plot(x, y)
-# ax.grid(True)
-# ax.set_title("GELU MOD: RELU(x)-GELU(x)")
-#
-# fig.tight_layout()
-# fig.savefig('nonlinear-figs3.pdf')
+if __name__ == "__main__":
+    fig, axs = plt.subplots(1, 4, figsize=(10, 4), dpi=800)
+    ############### EXP + #####################
+    ax, ax2, ax3, ax4 = axs
+    ax.set_title("EXPONENT")
+    ax.set_xlabel("(a)")
+    ax2.set_title("MANTISSA")
+    ax2.set_xlabel("(b)")
+    ax3.set_title("ERROR (BITS)")
+    ax3.set_xlabel("(c)")
+    ax4.set_title("ERROR (REAL)")
+    ax4.set_xlabel("(d)")
+    ax.legend()
+    plot_discontinuous_f_on(x, get_approx, f)
+    fig.tight_layout()
+    fig.savefig('nonlinear-figs1.pdf')

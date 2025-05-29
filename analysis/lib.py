@@ -1,8 +1,8 @@
 from transformers import GPT2Tokenizer
+
 tokenizer = GPT2Tokenizer.from_pretrained("EleutherAI/gpt-neo-125M")
 
 import numpy as np
-import torch
 
 x_e_min = -6
 x_e_max = 6
@@ -41,6 +41,7 @@ def repack_float(s, e, m, verbose=False):
         print(flt)
     return float.fromhex(flt)
 
+
 def f(x):
     return np.exp(x)
 
@@ -53,6 +54,8 @@ for sign in [0, 1]:
             return x
         else:
             return -x
+
+
     # _, lim_y_e, lim_y_m = unpack_float(f(SIGN(2 ** x_e_min)))
     for x_ in range(x_e_min, x_e_max + 1):
         _, flo_e, flo_m = unpack_float(f(SIGN(2 ** x_)))
@@ -61,8 +64,8 @@ for sign in [0, 1]:
         q = hex((int(flo_e) + 127) * 128 + int(flo_m * 128))[2:]
         b_lookup[(sign, x_)] = (flo_e, flo_m)
         # print(x_, flo_e)
-        print(f"SIGN({sign}   BASE[{x_+127}]= 16'h{q}")
-        print(f"SIGN({sign} OFFSET[{x_+127}]={d_lookup[(sign, x_)]*128}")
+        # print(f"SIGN({sign}   BASE[{x_ + 127}]= 16'h{q}")
+        # print(f"SIGN({sign} OFFSET[{x_ + 127}]={d_lookup[(sign, x_)] * 128}")
 
 
 def get_approx(x):
@@ -71,7 +74,7 @@ def get_approx(x):
     elif x == float("inf"):
         return float("inf")
     elif np.isnan(x):
-        return float("nan")
+        raise Exception(f"Received exp(nan): {x}")
     s, e, m = unpack_float(x)
     assert (m < 1)
     if e < x_e_min:
@@ -87,23 +90,54 @@ def get_approx(x):
     e_app = np.floor(e_acc + m_acc)
     # print(x, c, s, e, m, e_acc, m_acc)
     m_app = int((m_acc * 128) % 128)
-    return repack_float(False, e_app, m_app)
+    q = repack_float(False, e_app, m_app)
+    if np.isnan(q):
+        raise Exception(f"Returning exp({x})=nan")
+    return q
 
-print(get_approx(float("nan")))
+
+def get_precise(x):
+    if x == float("-inf"):
+        return 0
+    elif x == float("inf"):
+        return float("inf")
+    elif np.isnan(x):
+        raise Exception(f"Received exp(nan): {x}")
+    s, e, m = unpack_float(x)
+    assert (m < 1)
+    if e < x_e_min:
+        return 1
+    if e > x_e_max:
+        if s:
+            return 0
+        else:
+            return torch.inf
+    qp = np.exp(x)
+    if qp == float("-inf"):
+        return 0
+    _, e_app, m_app = unpack_float(qp)
+    q = repack_float(False, e_app, m_app)
+    if np.isnan(q):
+        raise Exception(f"Returning exp({x})=nan")
+    return q
+
 
 def softmax_baseline(inp):
-    expd = torch.exp(inp)
+    r_maxes = torch.max(inp, -1).values
+    expd = inp - r_maxes[:, :, :, None] + 16
+    expd.apply_(get_precise)
     rsums = torch.sum(expd, -1)
-    # print(expd.shape)
-    # print(rsums.shape)
-    return expd / rsums[:,:,:, None]
+    return expd / rsums[:, :, :, None]
 
 
 def softmax_approx(inp):
-    expd = inp.clone()
-    expd.apply_(lambda x: get_approx(x))
+    r_maxes = torch.max(inp, -1).values
+    expd = inp - r_maxes[:, :, :, None] + 8
+    expd.apply_(get_approx)
     rsums = torch.sum(expd, -1)
-    return expd / rsums[:,:,:, None]
+    return expd / rsums[:, :, :, None]
+
+# APPROX PERPLEXITY ~ 60.65
 
 # coding=utf-8
 # Copyright 2021 The Eleuther AI and HuggingFace Inc. team. All rights reserved.
@@ -154,17 +188,14 @@ from transformers.utils import (
 )
 from transformers.models.gpt_neo.configuration_gpt_neo import GPTNeoConfig
 
-
 # This makes `_prepare_4d_causal_attention_mask` a leaf function in the FX graph.
 # It means that the function will not be traced through and simply appear as a node in the graph.
 if is_torch_fx_available():
     _prepare_4d_causal_attention_mask = torch.fx.wrap(_prepare_4d_causal_attention_mask)
 
-
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "GPTNeoConfig"
-
 
 _CHECKPOINT_FOR_DOC = "EleutherAI/gpt-neo-1.3B"
 
@@ -248,6 +279,7 @@ def load_tf_weights_in_gpt_neo(model, config, gpt_neo_checkpoint_path):
     model.set_output_embeddings(lin)
     return model
 
+
 class GPTNeoSelfAttention(nn.Module):
     def __init__(self, config, attention_type, layer_id=None):
         super().__init__()
@@ -302,7 +334,8 @@ class GPTNeoSelfAttention(nn.Module):
         new_shape = tensor.size()[:-2] + (num_heads * attn_head_size,)
         return tensor.view(new_shape)
 
-    def softmax(input: torch.Tensor, dim: Optional[int] = None, _stacklevel: int = 3, dtype: Optional[torch.dtype] = None) -> torch.Tensor:
+    def softmax(input: torch.Tensor, dim: Optional[int] = None, _stacklevel: int = 3,
+                dtype: Optional[torch.dtype] = None) -> torch.Tensor:
         if dtype is None:
             ret = input.softmax(dim)
         else:
@@ -318,7 +351,7 @@ class GPTNeoSelfAttention(nn.Module):
 
         # Apply sliding window masking for local attention layers
         query_length, key_length = query.size(-2), key.size(-2)
-        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
+        causal_mask = self.bias[:, :, key_length - query_length: key_length, :key_length]
         mask_value = torch.finfo(attn_weights.dtype).min
         # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
         # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
@@ -329,7 +362,10 @@ class GPTNeoSelfAttention(nn.Module):
             causal_mask = attention_mask[:, :, :, : key.shape[-2]]
             attn_weights = attn_weights + causal_mask
 
-        attn_weights = softmax_approx(attn_weights)
+        # print("INPUT", attn_weights)
+        attn_weights = softmax_baseline(attn_weights)
+        # attn_comp = torch.nn.functional.softmax(attn_weights)
+        # print("OUTPUT", attn_weights)
         attn_weights = attn_weights.to(value.dtype)
         attn_weights = self.attn_dropout(attn_weights)
 
@@ -342,14 +378,14 @@ class GPTNeoSelfAttention(nn.Module):
         return attn_output, attn_weights
 
     def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        layer_past=None,
-        head_mask=None,
-        use_cache=False,
-        output_attentions=False,
-        cache_position=None,
+            self,
+            hidden_states,
+            attention_mask=None,
+            layer_past=None,
+            head_mask=None,
+            use_cache=False,
+            output_attentions=False,
+            cache_position=None,
     ):
         query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
@@ -397,14 +433,14 @@ class GPTNeoAttention(nn.Module):
             )
 
     def forward(
-        self,
-        hidden_states,
-        layer_past=None,
-        attention_mask=None,
-        head_mask=None,
-        use_cache=False,
-        output_attentions=False,
-        cache_position=None,
+            self,
+            hidden_states,
+            layer_past=None,
+            attention_mask=None,
+            head_mask=None,
+            use_cache=False,
+            output_attentions=False,
+            cache_position=None,
     ):
         return self.attention(
             hidden_states,
@@ -445,14 +481,14 @@ class GPTNeoBlock(nn.Module):
         self.mlp = GPTNeoMLP(inner_dim, config)
 
     def forward(
-        self,
-        hidden_states,
-        layer_past=None,
-        attention_mask=None,
-        head_mask=None,
-        use_cache=False,
-        output_attentions=False,
-        cache_position=None,
+            self,
+            hidden_states,
+            layer_past=None,
+            attention_mask=None,
+            head_mask=None,
+            use_cache=False,
+            output_attentions=False,
+            cache_position=None,
     ):
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
@@ -652,19 +688,19 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Union[Cache, Tuple[torch.FloatTensor]]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+            self,
+            input_ids: Optional[torch.Tensor] = None,
+            past_key_values: Optional[Union[Cache, Tuple[torch.FloatTensor]]] = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            token_type_ids: Optional[torch.Tensor] = None,
+            position_ids: Optional[torch.Tensor] = None,
+            head_mask: Optional[torch.Tensor] = None,
+            inputs_embeds: Optional[torch.Tensor] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -789,12 +825,12 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 
     # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
     def _update_causal_mask(
-        self,
-        attention_mask: torch.Tensor,
-        input_tensor: torch.Tensor,
-        cache_position: torch.Tensor,
-        past_key_values: Cache,
-        output_attentions: bool,
+            self,
+            attention_mask: torch.Tensor,
+            input_tensor: torch.Tensor,
+            cache_position: torch.Tensor,
+            past_key_values: Cache,
+            output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
@@ -810,10 +846,10 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
         if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
-                attention_mask,
-                inputs_embeds=input_tensor,
-                past_key_values_length=past_seen_tokens,
-                is_training=self.training,
+                    attention_mask,
+                    inputs_embeds=input_tensor,
+                    past_key_values_length=past_seen_tokens,
+                    is_training=self.training,
             ):
                 return None
 
@@ -840,10 +876,10 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         )
 
         if (
-            self.config._attn_implementation == "sdpa"
-            and attention_mask is not None
-            and attention_mask.device.type in ["cuda", "xpu"]
-            and not output_attentions
+                self.config._attn_implementation == "sdpa"
+                and attention_mask is not None
+                and attention_mask.device.type in ["cuda", "xpu"]
+                and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
@@ -856,14 +892,14 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
     @staticmethod
     # Copied from transformers.models.llama.modeling_llama.LlamaModel._prepare_4d_causal_attention_mask_with_cache_position
     def _prepare_4d_causal_attention_mask_with_cache_position(
-        attention_mask: torch.Tensor,
-        sequence_length: int,
-        target_length: int,
-        dtype: torch.dtype,
-        device: torch.device,
-        cache_position: torch.Tensor,
-        batch_size: int,
-        **kwargs,
+            attention_mask: torch.Tensor,
+            sequence_length: int,
+            target_length: int,
+            dtype: torch.dtype,
+            device: torch.device,
+            cache_position: torch.Tensor,
+            batch_size: int,
+            **kwargs,
     ):
         """
         Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
@@ -944,21 +980,21 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel, GenerationMixin):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Union[Cache, Tuple[torch.FloatTensor]]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
+            self,
+            input_ids: Optional[torch.Tensor] = None,
+            past_key_values: Optional[Union[Cache, Tuple[torch.FloatTensor]]] = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            token_type_ids: Optional[torch.Tensor] = None,
+            position_ids: Optional[torch.Tensor] = None,
+            head_mask: Optional[torch.Tensor] = None,
+            inputs_embeds: Optional[torch.Tensor] = None,
+            labels: Optional[torch.Tensor] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            cache_position: Optional[torch.LongTensor] = None,
+            **kwargs,
     ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1019,7 +1055,7 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel, GenerationMixin):
 
     @staticmethod
     def _reorder_cache(
-        past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
+            past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
     ) -> Tuple[Tuple[torch.Tensor]]:
         """
         This function is used to re-order the `past_key_values` cache if [`~PretrainedModel.beam_search`] or
@@ -1064,19 +1100,19 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Union[Cache, Tuple[torch.FloatTensor]]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+            self,
+            input_ids: Optional[torch.Tensor] = None,
+            past_key_values: Optional[Union[Cache, Tuple[torch.FloatTensor]]] = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            token_type_ids: Optional[torch.Tensor] = None,
+            position_ids: Optional[torch.Tensor] = None,
+            head_mask: Optional[torch.Tensor] = None,
+            inputs_embeds: Optional[torch.Tensor] = None,
+            labels: Optional[torch.Tensor] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1187,19 +1223,19 @@ class GPTNeoForTokenClassification(GPTNeoPreTrainedModel):
         expected_loss=0.25,
     )
     def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, Tuple[Tuple[torch.Tensor]]]] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+            self,
+            input_ids: Optional[torch.LongTensor] = None,
+            past_key_values: Optional[Union[Cache, Tuple[Tuple[torch.Tensor]]]] = None,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            token_type_ids: Optional[torch.LongTensor] = None,
+            position_ids: Optional[torch.LongTensor] = None,
+            head_mask: Optional[torch.FloatTensor] = None,
+            inputs_embeds: Optional[torch.FloatTensor] = None,
+            labels: Optional[torch.LongTensor] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
     ) -> Union[Tuple, TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1270,18 +1306,18 @@ class GPTNeoForQuestionAnswering(GPTNeoPreTrainedModel):
         real_checkpoint=_CHECKPOINT_FOR_DOC,
     )
     def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        start_positions: Optional[torch.LongTensor] = None,
-        end_positions: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+            self,
+            input_ids: Optional[torch.LongTensor] = None,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            token_type_ids: Optional[torch.LongTensor] = None,
+            position_ids: Optional[torch.LongTensor] = None,
+            head_mask: Optional[torch.FloatTensor] = None,
+            inputs_embeds: Optional[torch.FloatTensor] = None,
+            start_positions: Optional[torch.LongTensor] = None,
+            end_positions: Optional[torch.LongTensor] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
     ) -> Union[Tuple, QuestionAnsweringModelOutput]:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1356,9 +1392,54 @@ __all__ = [
 
 model = GPTNeoForCausalLM.from_pretrained("EleutherAI/gpt-neo-125M")
 
-query = ("There's a town in California called the garlic capital of the world. Someday I'll go to that city.")
-input_ids = tokenizer(query, return_tensors="pt").input_ids
+# query = ("There's a town in California called the garlic capital of the world. Someday I'll go to that city.")
+# input_ids = tokenizer(query, return_tensors="pt").input_ids
+#
+# gen_tokens = model.generate(input_ids, do_sample=False)
+# gen_text = tokenizer.batch_decode(gen_tokens)[0]
 
-gen_tokens = model.generate(input_ids, do_sample=False)
-gen_text = tokenizer.batch_decode(gen_tokens)[0]
-print(gen_text)
+from datasets import load_dataset
+
+test = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
+encodings = tokenizer("\n\n".join(test["text"]), return_tensors="pt")
+
+import torch
+from tqdm import tqdm
+
+max_length = 256
+stride = 512
+seq_len = encodings.input_ids.size(1)
+
+nll_sum = 0.0
+n_tokens = 0
+prev_end_loc = 0
+for begin_loc in tqdm(range(0, 3)):
+    end_loc = min(begin_loc + max_length, seq_len)
+    trg_len = end_loc - prev_end_loc  # may be different from stride on last loop
+    input_ids = encodings.input_ids[:, begin_loc:end_loc]
+    target_ids = input_ids.clone()
+    target_ids[:, :-trg_len] = -100
+
+    with torch.no_grad():
+        outputs = model(input_ids, labels=target_ids)
+
+        # loss is calculated using CrossEntropyLoss which averages over valid labels
+        # N.B. the model only calculates loss over trg_len - 1 labels, because it internally shifts the labels
+        # to the left by 1.
+        neg_log_likelihood = outputs.loss
+
+    # Accumulate the total negative log-likelihood and the total number of tokens
+    num_valid_tokens = (target_ids != -100).sum().item()  # number of valid tokens in target_ids
+    batch_size = target_ids.size(0)
+    num_loss_tokens = num_valid_tokens - batch_size  # subtract batch_size due to internal label shift
+    nll_sum += neg_log_likelihood * num_loss_tokens
+    n_tokens += num_loss_tokens
+
+    prev_end_loc = end_loc
+    if end_loc == seq_len:
+        break
+
+avg_nll = nll_sum / n_tokens  # average negative log-likelihood per token
+ppl = torch.exp(avg_nll)
+print(ppl)
+print(avg_nll)

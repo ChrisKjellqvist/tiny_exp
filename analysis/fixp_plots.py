@@ -76,7 +76,7 @@ def x_map_ar(x):
     return np.array([x_map(xp) for xp in x])
 
 
-SIGN = lambda __x: -__x
+SIGN = lambda __x: __x
 x_e_min = -6
 x_e_max = 6
 
@@ -102,6 +102,8 @@ for key in d_lookup.keys():
 
 def get_approx(x):
     _, e, m = unpack_float(x)
+    if e < x_e_min:
+        return False, 0, 0
     su = lim_y_m
     for i in range(x_e_min, e):
         su += d_lookup[i]
@@ -114,8 +116,8 @@ def get_approx(x):
 
 
 def plot_discontinuous_f_on(x, fapprox, fgold):
-    ax.set_yticks(range(-50, 50))
-    ax2.set_yticks(np.arange(0, 1, 1.0 / 128), labels="")
+    # ax.set_yticks(range(-50, 50))
+    # ax2.set_yticks(np.arange(0, 1, 1.0 / 128), labels="")
     ax.grid(True)
     ax2.grid(True)
     e_pts = []
@@ -130,6 +132,8 @@ def plot_discontinuous_f_on(x, fapprox, fgold):
     err = 0
     errl1 = 0
     biggest_diff = 0
+    current_gold = None
+    current_approx = None
 
     for x_i in x:
         x_i_s, x_i_e, x_i_m = unpack_float(x_i)
@@ -153,8 +157,8 @@ def plot_discontinuous_f_on(x, fapprox, fgold):
         # print(x_i, y_gold, y_approx)
         if current_gold != e_gold:
             if current_gold is not None:
-                ax.plot(x_pts, e_pts, marker='.', markersize=4, color='black')
-                ax2.plot(x_pts, m_pts, marker='.', markersize=4, color='black')
+                ax.plot(x_pts, e_pts, marker='.', linewidth=1, markersize=2, color='black')
+                ax2.plot(x_pts, m_pts, marker='.', linewidth=1, markersize=2, color='black')
             current_gold = e_gold
             for a in [e_pts, x_pts, m_pts]:
                 a.clear()
@@ -163,22 +167,15 @@ def plot_discontinuous_f_on(x, fapprox, fgold):
         m_pts.append(m_gold)
 
         if current_approx != e_approx:
-            if current_approx is not None:
-                ax.plot(x_approx_pts, e_approx_pts, marker='.', markersize=2, color='red')
-                ax2.plot(x_approx_pts, m_approx_pts, marker='.', markersize=2, color='red')
             current_approx = e_approx
             for a in [e_approx_pts, x_approx_pts, m_approx_pts]:
                 a.clear()
         x_approx_pts.append(xm)
         e_approx_pts.append(e_approx)
         m_approx_pts.append(m_approx / 128)
-    ax.plot(x_pts, e_pts, marker='.', markersize=4, color='black')
-    ax2.plot(x_pts, m_pts, marker='.', markersize=4, color='black')
-    ax.plot(x_approx_pts, e_approx_pts, marker='.', markersize=2, color='red')
-    ax2.plot(x_approx_pts, m_approx_pts, marker='.', markersize=2, color='red')
+    ax.plot(x_pts, e_pts, marker='.', linewidth=1, markersize=2, color='black')
+    ax2.plot(x_pts, m_pts, marker='.', linewidth=1, markersize=2, color='black')
 
-    ax3.plot(err_x_pts, err_pts)
-    ax4.plot(err_x_pts, err_real_pts, label="real error")
     mv_x = []
     mv_real = []
     window_sz = 32
@@ -188,17 +185,9 @@ def plot_discontinuous_f_on(x, fapprox, fgold):
         mv_x.append(err_x_pts[i])
 
 
-d__ = 1/1024
+d__ = 1/128
 x = np.arange(d__, 32, d__)
-for i in
-for i in range(x_e_min, x_e_max + 1):
-    for j in range(128):
-        h = f"0x1.{hex(2 * j)[2:]}p{i}"
-        f_ = float.fromhex(h)
-        x.append(SIGN(f_))
 
-x.sort()
-x = np.array(x)
 to_sup_map = {"0": "\u2070", "1": "\u00b9", "2": "\u00b2", "3": "\u00b3",
               "4": "\u2074", "5": "\u2075", "6": "\u2076", "7": "\u2077",
               "8": "\u2078", "9": "\u2079", "-": "\u207b"}
@@ -211,12 +200,11 @@ def to_sup(a: str):
         return ""
 
 
-fig, axs = plt.subplots(1, 1, figsize=(10, 5), dpi=800)
+fig, axs = plt.subplots(1, 2, figsize=(5, 3), dpi=800)
 ############### EXP + #####################
-ax, ax2, ax3, ax4 = axs
-ax.set_title("EXPONENT EXP +")
-ax2.set_title("MANTISSA EXP +")
-ax3.set_title("ERROR (BITS)")
-ax4.set_title("ERROR (REAL)")
+ax, ax2 = axs
+ax.set_ylabel("EXPONENT")
+ax2.set_ylabel("MANTISSA")
 plot_discontinuous_f_on(x, get_approx, f)
+fig.tight_layout()
 fig.savefig('fig1.pdf')
