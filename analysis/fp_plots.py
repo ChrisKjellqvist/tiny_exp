@@ -78,7 +78,7 @@ def x_map_ar(x):
 
 SIGN = lambda __x: __x
 x_e_min = 0
-x_e_max = 0
+x_e_max = 4
 
 _, lim_y_e, lim_y_m = unpack_float(f(SIGN(2 ** x_e_min)))
 d_lookup = {}
@@ -142,6 +142,7 @@ def plot_discontinuous_f_on(x, fapprox, fgold):
     err = 0
     errl1 = 0
     biggest_diff = 0
+    has_done_once = False
 
     for x_i in x:
         x_i_s, x_i_e, x_i_m = unpack_float(x_i)
@@ -177,7 +178,9 @@ def plot_discontinuous_f_on(x, fapprox, fgold):
         if current_approx != e_approx:
             if current_approx is not None:
                 ax.plot(x_approx_pts, e_approx_pts, marker='.', markersize=2, color='red', label="Approx.")
-                ax.legend()
+                if not has_done_once:
+                    ax.legend()
+                    has_done_once = True
                 ax2.plot(x_approx_pts, m_approx_pts, marker='.', markersize=2, color='red')
             current_approx = e_approx
             for a in [e_approx_pts, x_approx_pts, m_approx_pts]:
