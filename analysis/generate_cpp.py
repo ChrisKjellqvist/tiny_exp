@@ -92,7 +92,7 @@ if __name__ == "__main__":
         cdat_ty_large = f"uint{int(2**np.ceil(np.log2(1+E+2*M)))}_t"
         ftype = "__fp16" if cdat_ty == "uint16_t" else "float"
         blookup_str = f"""const {cdat_ty} blookup[2][{x_e_max - x_e_min + 1}] = {{"""
-        dlookup_str = f"""const {cdat_ty_large} dlookup[2][{x_e_max - x_e_min + 1}] = {{"""
+        dlookup_str = f"""const {cdat_ty} dlookup[2][{x_e_max - x_e_min + 1}] = {{"""
         d_lookup = {}
         b_lookup = {}
         for sign in [0, 1]:
@@ -133,7 +133,8 @@ if __name__ == "__main__":
         ONE = hex(((2**(E-1))-1)*(2**M))
         sptr.write(f"""
 namespace fpE{E}M{M} {{
-{cdat_ty} tiny_exp(const {cdat_ty} &as_bit) {{
+template<>
+{cdat_ty} tiny_exp<{cdat_ty}>(const {cdat_ty} &as_bit) {{
     {cdat_ty} S = as_bit >> {E+M};
     {cdat_ty} E = (as_bit >> {M}) & {EMASK};
     if (E >= {x_e_max+Eoff}) {{
@@ -143,14 +144,17 @@ namespace fpE{E}M{M} {{
         return {ONE};
     }}
     {cdat_ty} Enorm = (E - {x_e_min + Eoff});
-    {cdat_ty_large} M = (as_bit & {MMASK}) * dlookup[S][Enorm];
+    {cdat_ty_large} D = static_cast<{cdat_ty_large}>(dlookup[S][Enorm]);
+    {cdat_ty_large} M = (as_bit & {MMASK}) * D;
+    {cdat_ty} base = blookup[S][Enorm];
     if (S) {{
-        return blookup[S][Enorm] - static_cast<{cdat_ty}>(M >> {M});
+        return base - static_cast<{cdat_ty}>(M >> {M});
     }} else {{
-        return blookup[S][Enorm] + static_cast<{cdat_ty}>(M >> {M});
+        return base + static_cast<{cdat_ty}>(M >> {M});
     }}
 }}
-float tiny_exp(const float &f) {{
+template<>
+float tiny_exp<float>(const float &f) {{
     uint32_t q = std::bit_cast<uint32_t>(f);
     {cdat_ty} r = tiny_exp(static_cast<{cdat_ty}>(q >> {32-(1+E+M)}));
     return std::bit_cast<float>(static_cast<uint32_t>(r)<<{32-(1+E+M)});
@@ -158,8 +162,8 @@ float tiny_exp(const float &f) {{
 }}""")
         hptr.write(f"""
 namespace fpE{E}M{M} {{
-float tiny_exp(const float &f);
-{cdat_ty} tiny_exp(const {cdat_ty} &as_bit);
+template <typename t>
+t tiny_exp(const t &f);
 {blookup_str}
 {dlookup_str}
 }}""")
