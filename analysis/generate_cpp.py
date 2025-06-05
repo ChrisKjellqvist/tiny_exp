@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import math
 
-em_pairs = [(8, 7), (8, 23)]
+em_pairs = [(8, 7), (8, 23), (5, 10)]
 
 htable = {'0': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6,
           '7': 7, '8': 8, '9': 9, 'a': 10, 'b': 11, 'c': 12, 'd': 13,
@@ -89,15 +89,15 @@ if __name__ == "__main__":
         # this is probably good enough
         x_e_min = -x_e_max-1
         cdat_ty = f"uint{int(2**np.ceil(np.log2(1+E+M)))}_t"
+        cdat_unsigned = cdat_ty[1:]
+        cdat_ty_fused = f"uint{int(2*2**np.ceil(np.log2(1+E+M)))}_t"
         cdat_ty_large = f"uint{int(2**np.ceil(np.log2(1+E+2*M)))}_t"
         ftype = "__fp16" if cdat_ty == "uint16_t" else "float"
-        blookup_str = f"""const {cdat_ty} blookup[2][{x_e_max - x_e_min + 1}] = {{"""
-        dlookup_str = f"""const {cdat_ty} dlookup[2][{x_e_max - x_e_min + 1}] = {{"""
+        lookup_str = f"""const {cdat_ty_fused} lookup[2][{x_e_max - x_e_min + 1}] = {{"""
         d_lookup = {}
         b_lookup = {}
         for sign in [0, 1]:
-            blookup_str += "\n\t{"
-            dlookup_str += "\n\t{"
+            lookup_str += "\n\t{"
             def SIGN(x):
                 if sign == 0:
                     return x
@@ -111,26 +111,24 @@ if __name__ == "__main__":
                 # BASE
                 q = hex((int(flo_e) + Eoff) * Mdivs + int(flo_m * Mdivs))
                 b_lookup[(sign, x_)] = (flo_e, flo_m)
-                blookup_str += q
                 # DELTA
                 d = fhi_e - flo_e + fhi_m - flo_m
                 d_lookup[(sign, x_)] = d
                 print(sign, x_, d)
-                dlookup_str += hex(int(np.abs(d) * Mdivs))
+                delta = int(np.abs(d) * Mdivs)
+                lookup_str += hex(delta) + q[2:]
                 if x_ != x_e_max-1:
-                    blookup_str += ", "
-                    dlookup_str += ", "
-            blookup_str += "}"
-            dlookup_str += "}"
+                    lookup_str += ", "
+            lookup_str += "}"
             if sign == 0:
-                blookup_str += ","
-                dlookup_str += ","
+                lookup_str += ","
             else:
-                blookup_str += "};"
-                dlookup_str += "};"
+                lookup_str += "};"
         EMASK = hex((2**E)-1)
         MMASK = hex((2**M)-1)
         ONE = hex(((2**(E-1))-1)*(2**M))
+        DSHAMT = int(2**np.ceil(np.log2(1+E+M)))
+        BMASK = int(2 ** DSHAMT - 1)
         sptr.write(f"""
 namespace fpE{E}M{M} {{
 template<>
@@ -143,10 +141,11 @@ template<>
     }} else if (E < {x_e_min+Eoff}) {{
         return {ONE};
     }}
-    {cdat_ty} Enorm = (E - {x_e_min + Eoff});
-    {cdat_ty_large} D = static_cast<{cdat_ty_large}>(dlookup[S][Enorm]);
+    {cdat_ty} Enorm = E - {x_e_min + Eoff};
+    {cdat_ty_fused} fused = lookup[S][Enorm];
+    {cdat_ty_large} D = fused >> {DSHAMT};
+    {cdat_ty} base = fused & {hex(BMASK)};
     {cdat_ty_large} M = (as_bit & {MMASK}) * D;
-    {cdat_ty} base = blookup[S][Enorm];
     if (S) {{
         return base - static_cast<{cdat_ty}>(M >> {M});
     }} else {{
@@ -164,8 +163,7 @@ float tiny_exp<float>(const float &f) {{
 namespace fpE{E}M{M} {{
 template <typename t>
 t tiny_exp(const t &f);
-{blookup_str}
-{dlookup_str}
+{lookup_str}
 }}""")
     hptr.write("\n#endif")
     sptr.close()
