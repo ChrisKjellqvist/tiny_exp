@@ -1,3 +1,5 @@
+`include "def.v"
+
 module RegFileMAC_BF16 (
     input         clk,
     input  [15:0] x,
@@ -6,12 +8,12 @@ module RegFileMAC_BF16 (
     input         cfg_w_en,
     input         cfg_sgn,
     input [3:0]   cfg_idx,
-    input [15:0]  cfg_base,
-    input [25:0]  cfg_offset
+    input [`BASE_WIDTH-1:0]  cfg_base,
+    input [`OFFSET_WIDTH-1:0]  cfg_offset
 );
 
-reg [15:0] BASES   [0:1][0:12];
-reg [25:0] OFFSETS [0:1][0:12];
+reg [`BASE_WIDTH-1:0] BASES   [0:1][0:12];
+reg [`OFFSET_WIDTH-1:0] OFFSETS [0:1][0:12];
 
 always @(posedge clk) begin
     if (cfg_w_en) begin
@@ -30,13 +32,13 @@ localparam Emax = 6;
 wire [7:0] E_norm = E - (127+Emin);
 wire [3:0] E_adj = E_norm[3:0];
 
-wire [15:0] base = BASES[S][E_adj];
-wire [25:0] offset = OFFSETS[S][E_adj];
+wire [`BASE_WIDTH-1:0] base = BASES[S][E_adj];
+wire [`OFFSET_WIDTH-1:0] offset = OFFSETS[S][E_adj];
 
-wire [25:0] product = M * offset;
-wire [15:0] product_used = product[22:7];
+wire [`OFFSET_WIDTH+`BF16_M_BITS-1:0] product = M * offset;
+wire [`BASE_WIDTH-1:0] product_used = product[`BF16_M_BITS+`BASE_WIDTH-1:`BF16_M_BITS];
 
-wire [15:0] approx = base + product_used;
+wire [`BASE_WIDTH-1:0] approx = base + product_used;
 
 wire is_big = E >= (127 + Emax);
 wire is_small = E < (127 + Emin);

@@ -1,3 +1,4 @@
+/* verilator lint_off WIDTHTRUNC */
 assign BASES  [0][ 0] = 16'h3f81;
 assign OFFSETS[0][ 0] = 26'h1;
 assign BASES  [0][ 1] = 16'h3f82;
@@ -51,3 +52,4 @@ assign BASES  [1][11] = 16'h33f1;
 assign OFFSETS[1][11] = ~(26'hb8d)+1;
 assign BASES  [1][12] = 16'h2864;
 assign OFFSETS[1][12] = ~(26'h1719)+1;
+/* verilator lint_on WIDTHTRUNC */

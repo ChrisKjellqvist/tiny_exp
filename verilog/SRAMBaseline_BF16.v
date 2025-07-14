@@ -25,6 +25,7 @@ localparam Emax = 6;
 
 wire [7:0] E_norm = E - (127+Emin);
 wire [3:0] E_adj = E_norm[3:0];
+
 assign sram_hi_idx = {E_adj, M_hi, S};
 assign sram_lo_idx = {E_adj, M_lo, S};
 
