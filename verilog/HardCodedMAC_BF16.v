@@ -5,7 +5,7 @@ module HardCodedMAC_BF16 (
 );
 
 wire [15:0] BASES   [0:1][0:12];
-wire [15:0] OFFSETS [0:1][0:12];
+wire [25:0] OFFSETS [0:1][0:12];
 `include "ExpLUT.v"
 
 wire       S = x[15];
@@ -15,12 +15,13 @@ wire [6:0] M = x[6:0];
 localparam Emin = -7;
 localparam Emax = 6;
 
-wire [7:0] E_adj = E - (127+Emin);
+wire [7:0] E_norm = E - (127+Emin);
+wire [3:0] E_adj = E_norm[3:0];
 
 wire [15:0] base = BASES[S][E_adj];
-wire [15:0] offset = OFFSETS[S][E_adj];
+wire [25:0] offset = OFFSETS[S][E_adj];
 
-wire [22:0] product = M * offset;
+wire [25:0] product = M * offset;
 wire [15:0] product_used = product[22:7];
 
 wire [15:0] approx = base + product_used;
