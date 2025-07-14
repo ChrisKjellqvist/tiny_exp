@@ -1,6 +1,5 @@
-module RegFileMAC_BF16 (
+module HardCodedMAC_BF16 (
     input         clk,
-    input         rst,
     input  [15:0] x,
     output [15:0] y
 );
