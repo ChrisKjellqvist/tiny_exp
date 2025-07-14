@@ -15,7 +15,7 @@ wire [6:0] M = x[6:0];
 localparam Emin = -7;
 localparam Emax = 6;
 
-wire [7:0] E_adj = E + (127+Emin);
+wire [7:0] E_adj = E - (127+Emin);
 
 wire [15:0] base = BASES[S][E_adj];
 wire [15:0] offset = OFFSETS[S][E_adj];
