@@ -3,26 +3,6 @@ import numpy as np
 import torch as to
 import math as ma
 
-g = to.nn.GELU()
-re = to.nn.ReLU()
-unit = lambda x: x
-
-
-def gelu(q):
-    return (q * 0.5) * (1 + ma.erf(q / ma.sqrt(2)))
-
-
-def relu(q):
-    if q > 0:
-        return q
-    else:
-        return 0
-
-
-def gelu_mod(q):
-    return gelu(q) - relu(q)
-
-
 def quantize_7(x):
     return int(x * 128) / 128
 
@@ -31,10 +11,43 @@ htable = {'0': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6,
           '7': 7, '8': 8, '9': 9, 'a': 10, 'b': 11, 'c': 12, 'd': 13,
           'e': 14, 'f': 15}
 
-f = np.exp
+def exp(x):
+    return np.exp(x)
 
 
-def hex2int(h, acc=0):
+def gen_htan(x, L, k, c, z):
+    return L / (1 + np.exp(-k * (x - c))) - z
+
+
+def silu(x):
+    return gen_htan(x, L=1, k=1, c=0, z=0)
+
+def htan(x):
+    return gen_htan(x, L=2, k=2, c=0, z=1)
+
+def sin(x):
+    return np.exp(-(x**2))
+
+# proposed uarch:
+#   FLOAT( LUT_base[E] + M * LUT_off[E] ) + MUX(?, REG, 0)
+
+
+f = exp
+SIGN = lambda __x: -__x
+
+x_e_min = -7
+x_e_max = 6
+
+plot_err = False
+plot_approx = False
+if plot_approx:
+    dot_size = 4
+else:
+    dot_size = 0
+
+
+
+def hex2int(h, acc=0): 
     if len(h) == 0:
         return acc
     else:
@@ -76,10 +89,6 @@ def x_map_ar(x):
     return np.array([x_map(xp) for xp in x])
 
 
-SIGN = lambda __x: __x
-x_e_min = 0
-x_e_max = 4
-
 _, lim_y_e, lim_y_m = unpack_float(f(SIGN(2 ** x_e_min)))
 d_lookup = {}
 for x_ in range(x_e_min, x_e_max + 1):
@@ -87,11 +96,14 @@ for x_ in range(x_e_min, x_e_max + 1):
     _, fhi_e, fhi_m = unpack_float(f(SIGN(2 ** (x_ + 1))))
     d_lookup[x_] = fhi_e - flo_e + fhi_m - flo_m
     q = hex((int(flo_e) + 127) * 128 + int(flo_m * 128))[2:]
-    print(f"  BASE[{x_+127}]= 16'h{q}")
-    print(f"OFFSET[{x_+127}]={d_lookup[x_]*128}")
+    print(f"assign BASES  [{0 if SIGN(-1)<0 else 1}][{x_-x_e_min:2d}] = 16'h{q};")
+    if SIGN(-1)>0:
+        print(f"assign OFFSETS[{0 if SIGN(-1)<0 else 1}][{x_-x_e_min:2d}] = ~(26'h{hex(int(d_lookup[x_]*128))[3:]})+1;")
+    else:
+        print(f"assign OFFSETS[{0 if SIGN(-1)<0 else 1}][{x_-x_e_min:2d}] = 26'h{hex(int(d_lookup[x_]*128))[2:]};")
 
-
-for x_ in range(x_e_min, x_e_max + 1):
+exit(0)
+for x_ in range(x_e_min, x_e_max  + 1):
     _, e, m = unpack_float(f(SIGN(2 ** x_)))
     q = hex((int(e) + 127) * 128 + int(m * 128))[2:]
     print(x_, ": ", e, m * 128, f"16'h{q}")
@@ -117,16 +129,17 @@ def plot_discontinuous_f_on(x, fapprox, fgold):
     xticks = [f"2{to_sup(str(i))}" for i in range(x_e_min, x_e_max + 2)]
     ax.set_xticks(range(x_e_min, x_e_max + 2), labels=xticks)
     ax2.set_xticks(range(x_e_min, x_e_max + 2), labels=xticks)
-    ax.set_yticks(range(-50, 50))
+    # ax.set_yticks(range(-50, 50))
     # ax2.set_yticks(np.arange(0, 1, 1.0 / 128), labels="")
     ax.grid(True)
     ax2.grid(True)
-    ax3.grid(True)
-    ax4.grid(True)
     ax.set_ylabel("Output Exponent")
     ax2.set_ylabel("Output Mantissa")
-    ax3.set_ylabel("Error (distance)")
-    ax4.set_ylabel("Error (%)")
+    if plot_err:
+        ax3.grid(True)
+        ax4.grid(True)
+        ax3.set_ylabel("Error (distance)")
+        ax4.set_ylabel("Error (%)")
     current_gold = None
     current_approx = None
     e_pts = []
@@ -141,6 +154,7 @@ def plot_discontinuous_f_on(x, fapprox, fgold):
     err_real_pts = []
     err = 0
     errl1 = 0
+    realerr = 0
     biggest_diff = 0
     has_done_once = False
 
@@ -149,8 +163,8 @@ def plot_discontinuous_f_on(x, fapprox, fgold):
         x_i_rnd = repack_float(x_i_s, x_i_e, x_i_m)
         y_gold = fgold(x_i_rnd)
         _, e_approx, m_approx = fapprox(x_i_rnd)
-        _, e_gold, m_gold = unpack_float(y_gold)
-        y_approx = repack_float(False, e_approx, m_approx / 128, verbose=True)
+        s, e_gold, m_gold = unpack_float(y_gold)
+        y_approx = repack_float(s, e_approx, m_approx / 128, verbose=True)
         diff = np.abs((e_approx + m_approx / 128) - (e_gold + m_gold))
 
         errl1 += diff
@@ -158,16 +172,16 @@ def plot_discontinuous_f_on(x, fapprox, fgold):
         err_pts.append(diff * 128)
         err_real_pts.append(np.abs(y_approx - y_gold) / y_gold * 100)
         err_x_pts.append(x_i)
-
+        realerr += abs(y_gold - y_approx) ** 2
         if diff > biggest_diff:
-            print("biggest diff @ ", x_i, y_gold, y_approx)
+            print(f"biggest diff f({SIGN(x_i):.03f}) = GOLD[{y_gold:.03f}], ~[{y_approx:.03f}], ERR[{abs((y_gold-y_approx)):.03f}]")
             biggest_diff = diff
         xm = x_map(x_i)
         # print(x_i, y_gold, y_approx)
         if current_gold != e_gold:
             if current_gold is not None:
-                ax.plot(x_pts, e_pts, marker='.', markersize=4, color='black', label="Baseline")
-                ax2.plot(x_pts, m_pts, marker='.', markersize=4, color='black')
+                ax.plot(x_pts, e_pts, marker='.', markersize=dot_size, color='black', label="Baseline")
+                ax2.plot(x_pts, m_pts, marker='.', markersize=dot_size, color='black')
             current_gold = e_gold
             for a in [e_pts, x_pts, m_pts]:
                 a.clear()
@@ -177,24 +191,28 @@ def plot_discontinuous_f_on(x, fapprox, fgold):
 
         if current_approx != e_approx:
             if current_approx is not None:
-                ax.plot(x_approx_pts, e_approx_pts, marker='.', markersize=2, color='red', label="Approx.")
+                if plot_approx:
+                    ax.plot(x_approx_pts, e_approx_pts, marker='.', markersize=2, color='red', label="Approx.")
                 if not has_done_once:
-                    ax.legend()
+                    if plot_approx:
+                        ax.legend()
                     has_done_once = True
-                ax2.plot(x_approx_pts, m_approx_pts, marker='.', markersize=2, color='red')
+                if plot_approx:
+                    ax2.plot(x_approx_pts, m_approx_pts, marker='.', markersize=2, color='red')
             current_approx = e_approx
             for a in [e_approx_pts, x_approx_pts, m_approx_pts]:
                 a.clear()
         x_approx_pts.append(xm)
         e_approx_pts.append(e_approx)
         m_approx_pts.append(m_approx / 128)
-    ax.plot(x_pts, e_pts, marker='.', markersize=4, color='black', label="Baseline")
-    ax2.plot(x_pts, m_pts, marker='.', markersize=4, color='black')
-    ax.plot(x_approx_pts, e_approx_pts, marker='.', markersize=2, color='red', label="Approx")
-    ax2.plot(x_approx_pts, m_approx_pts, marker='.', markersize=2, color='red')
-
-    ax3.plot(err_x_pts, err_pts)
-    ax4.plot(err_x_pts, err_real_pts, label="real error")
+    ax.plot(x_pts, e_pts, marker='.', markersize=dot_size, color='black', label="Baseline")
+    ax2.plot(x_pts, m_pts, marker='.', markersize=dot_size, color='black')
+    if plot_approx:
+        ax.plot(x_approx_pts, e_approx_pts, marker='.', markersize=2, color='red', label="Approx")
+        ax2.plot(x_approx_pts, m_approx_pts, marker='.', markersize=2, color='red')
+    if plot_err:
+        ax3.plot(err_x_pts, err_pts)
+        ax4.plot(err_x_pts, err_real_pts, label="real error")
     mv_x = []
     mv_real = []
     window_sz = 32
@@ -205,6 +223,7 @@ def plot_discontinuous_f_on(x, fapprox, fgold):
     # ax4.plot(mv_x, mv_real, label=f"error (moving avg {window_sz})")
     print(f"L1: {errl1 / len(x) * 128}")
     print(f"L2: {(err ** .5) / len(x) * 128}")
+    print(f"Average err: {(realerr ** 0.5)/len(x):0.4f}")
 
 
 x = []
@@ -229,18 +248,26 @@ def to_sup(a: str):
 
 
 if __name__ == "__main__":
-    fig, axs = plt.subplots(1, 4, figsize=(10, 4), dpi=800)
+    nplots = 2
+    if plot_err:
+        nplots += 2
+    fig, axs = plt.subplots(1, nplots, figsize=(nplots * 2.5, 3), dpi=800)
     ############### EXP + #####################
-    ax, ax2, ax3, ax4 = axs
-    ax.set_title("EXPONENT")
+    ax = axs[0]
+    ax2 = axs[1]
+    if plot_err:
+        ax3 = axs[2]
+        ax4 = axs[3]
+        ax3.set_title("ERROR (BITS)")
+        ax3.set_xlabel("(c)")
+        ax4.set_title("ERROR (REAL)")
+        ax4.set_xlabel("(d)")
+    # ax.set_title("EXPONENT")
     ax.set_xlabel("(a)")
-    ax2.set_title("MANTISSA")
+    # ax2.set_title("MANTISSA")
     ax2.set_xlabel("(b)")
-    ax3.set_title("ERROR (BITS)")
-    ax3.set_xlabel("(c)")
-    ax4.set_title("ERROR (REAL)")
-    ax4.set_xlabel("(d)")
-    ax.legend()
+    if plot_approx:
+        ax.legend()
     plot_discontinuous_f_on(x, get_approx, f)
     fig.tight_layout()
     fig.savefig('nonlinear-figs1.pdf')

@@ -6,10 +6,11 @@ template<>
 uint16_t tiny_exp<uint16_t>(const uint16_t &as_bit) {
     uint16_t S = as_bit >> 15;
     uint16_t E = (as_bit >> 7) & 0xff;
-    if (E >= 133) {
+    if (E >= 133) [[unlikely]] {
         if (S) return 0;
         else return 0x7f80;
-    } else if (E < 120) {
+    }
+    if (E < 120) [[unlikely]] {
         return 0x3f80;
     }
     uint16_t Enorm = E - 120;
@@ -17,11 +18,7 @@ uint16_t tiny_exp<uint16_t>(const uint16_t &as_bit) {
     uint32_t D = fused >> 16;
     uint16_t base = fused & 0xffff;
     uint32_t M = (as_bit & 0x7f) * D;
-    if (S) {
-        return base - static_cast<uint16_t>(M >> 7);
-    } else {
-        return base + static_cast<uint16_t>(M >> 7);
-    }
+    return base + (1 - (S << 1)) * static_cast<uint16_t>(M >> 7);
 }
 template<>
 float tiny_exp<float>(const float &f) {
@@ -35,10 +32,11 @@ template<>
 uint32_t tiny_exp<uint32_t>(const uint32_t &as_bit) {
     uint32_t S = as_bit >> 31;
     uint32_t E = (as_bit >> 23) & 0xff;
-    if (E >= 133) {
+    if (E >= 133) [[unlikely]] {
         if (S) return 0;
         else return 0x7f800000;
-    } else if (E < 120) {
+    }
+    if (E < 120) [[unlikely]] {
         return 0x3f800000;
     }
     uint32_t Enorm = E - 120;
@@ -46,11 +44,7 @@ uint32_t tiny_exp<uint32_t>(const uint32_t &as_bit) {
     uint64_t D = fused >> 32;
     uint32_t base = fused & 0xffffffff;
     uint64_t M = (as_bit & 0x7fffff) * D;
-    if (S) {
-        return base - static_cast<uint32_t>(M >> 23);
-    } else {
-        return base + static_cast<uint32_t>(M >> 23);
-    }
+    return base + (1 - (S << 1)) * static_cast<uint32_t>(M >> 23);
 }
 template<>
 float tiny_exp<float>(const float &f) {
@@ -64,10 +58,11 @@ template<>
 uint16_t tiny_exp<uint16_t>(const uint16_t &as_bit) {
     uint16_t S = as_bit >> 15;
     uint16_t E = (as_bit >> 10) & 0x1f;
-    if (E >= 18) {
+    if (E >= 18) [[unlikely]] {
         if (S) return 0;
         else return 0x7c00;
-    } else if (E < 11) {
+    }
+    if (E < 11) [[unlikely]] {
         return 0x3c00;
     }
     uint16_t Enorm = E - 11;
@@ -75,11 +70,7 @@ uint16_t tiny_exp<uint16_t>(const uint16_t &as_bit) {
     uint32_t D = fused >> 16;
     uint16_t base = fused & 0xffff;
     uint32_t M = (as_bit & 0x3ff) * D;
-    if (S) {
-        return base - static_cast<uint16_t>(M >> 10);
-    } else {
-        return base + static_cast<uint16_t>(M >> 10);
-    }
+    return base + (1 - (S << 1)) * static_cast<uint16_t>(M >> 10);
 }
 template<>
 float tiny_exp<float>(const float &f) {

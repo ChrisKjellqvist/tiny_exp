@@ -26,6 +26,8 @@ def gelu_mod(q):
 def quantize_7(x):
     return int(x * 128) / 128
 
+markersize=0
+
 
 htable = {'0': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6,
           '7': 7, '8': 8, '9': 9, 'a': 10, 'b': 11, 'c': 12, 'd': 13,
@@ -77,8 +79,8 @@ def x_map_ar(x):
 
 
 SIGN = lambda __x: __x
-x_e_min = -6
-x_e_max = 6
+x_e_min = 1
+x_e_max = 3
 
 _, lim_y_e, lim_y_m = unpack_float(f(SIGN(2 ** x_e_min)))
 d_lookup = {}
@@ -157,8 +159,8 @@ def plot_discontinuous_f_on(x, fapprox, fgold):
         # print(x_i, y_gold, y_approx)
         if current_gold != e_gold:
             if current_gold is not None:
-                ax.plot(x_pts, e_pts, marker='.', linewidth=1, markersize=2, color='black')
-                ax2.plot(x_pts, m_pts, marker='.', linewidth=1, markersize=2, color='black')
+                ax.plot(x_pts, e_pts, marker='.', linewidth=1, markersize=markersize, color='black')
+                ax2.plot(x_pts, m_pts, marker='.', linewidth=1, markersize=markersize, color='black')
             current_gold = e_gold
             for a in [e_pts, x_pts, m_pts]:
                 a.clear()
@@ -173,8 +175,8 @@ def plot_discontinuous_f_on(x, fapprox, fgold):
         x_approx_pts.append(xm)
         e_approx_pts.append(e_approx)
         m_approx_pts.append(m_approx / 128)
-    ax.plot(x_pts, e_pts, marker='.', linewidth=1, markersize=2, color='black')
-    ax2.plot(x_pts, m_pts, marker='.', linewidth=1, markersize=2, color='black')
+    ax.plot(x_pts, e_pts, marker='.', linewidth=1, markersize=markersize, color='black')
+    ax2.plot(x_pts, m_pts, marker='.', linewidth=1, markersize=markersize, color='black')
 
     mv_x = []
     mv_real = []
@@ -186,7 +188,7 @@ def plot_discontinuous_f_on(x, fapprox, fgold):
 
 
 d__ = 1/128
-x = np.arange(d__, 32, d__)
+x = np.arange(2**x_e_min, 2**x_e_max, d__)
 
 to_sup_map = {"0": "\u2070", "1": "\u00b9", "2": "\u00b2", "3": "\u00b3",
               "4": "\u2074", "5": "\u2075", "6": "\u2076", "7": "\u2077",
@@ -203,8 +205,10 @@ def to_sup(a: str):
 fig, axs = plt.subplots(1, 2, figsize=(5, 3), dpi=800)
 ############### EXP + #####################
 ax, ax2 = axs
-ax.set_ylabel("EXPONENT")
-ax2.set_ylabel("MANTISSA")
+ax.set_ylabel("OUTPUT EXPONENT")
+ax2.set_ylabel("OUTPUT MANTISSA")
+ax.set_xlabel("(a)")
+ax2.set_xlabel("(b)")
 plot_discontinuous_f_on(x, get_approx, f)
 fig.tight_layout()
 fig.savefig('fig1.pdf')

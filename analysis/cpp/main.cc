@@ -33,16 +33,30 @@ int main() {
     }
     auto e3 = std::chrono::high_resolution_clock::now();
 
-    printf("%f\n", q);
-    printf("%f\n", r);
-    printf("%f\n", s);
-    printf("%f\n", (float)t);
+    float z = 0;
+    auto s4 = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < c; ++i) {
+        z += tiny_exp_f32(i & MASK);
+    }
+    auto e4 = std::chrono::high_resolution_clock::now();
+
+
+    printf("tinyexp float        %f\n", q);
+    printf("stdexp float         %f\n", r);
+    printf("tinyexp warmup float %f\n", s);
+    printf("stdexp fp16          %f\n", (float)t);
+    printf("tinyvexp fp32        %f\n", z);
+    
     uint64_t fp32_us = std::chrono::duration_cast<std::chrono::microseconds>(e1-s1).count();
     uint64_t tiny_us = std::chrono::duration_cast<std::chrono::microseconds>(e2-s2).count();
     uint64_t fp16_us = std::chrono::duration_cast<std::chrono::microseconds>(e3-s3).count();
+    uint64_t v32_us = std::chrono::duration_cast<std::chrono::microseconds>(e4-s4).count();
+
     std::cout << "Regular FP32 Exp took " << fp32_us << "µs" << std::endl;
     std::cout << "Regular FP16 Exp took " << fp16_us << "µs" << std::endl;
     std::cout << "Tiny FP32 Exp took " << tiny_us << "µs" << std::endl;
+    std::cout << "Tiny V32 Exp took " << v32_us << "µs" << std::endl;
+
     printf("Tiny is %0.2fX faster than FP32\n", double(fp32_us)/double(tiny_us));
     printf("Tiny op takes %0.2fns\n", double(fp32_us)/c*1'000);
 }

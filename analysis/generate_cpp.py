@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import math
+import enum
 
 em_pairs = [(8, 7), (8, 23), (5, 10)]
 
@@ -9,20 +10,28 @@ htable = {'0': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6,
           'e': 14, 'f': 15}
 
 
+class Backend(enum.Enum):
+    CUDA = 0
+    METAL = 1
+    CPU = 2
+
+
 def hex2int(h, acc=0):
     if len(h) == 0:
         return acc
     else:
         return hex2int(h[1:], 16 * acc + htable[h[0]])
 
-if __name__ == "__main__":
-    hptr = open("cpp/tiny_exp.h", 'w')
-    sptr = open("cpp/tiny_exp.cc", 'w')
-    hptr.write("""#ifndef TINY_EXP_H
-#define TINY_EXP_H
+def export_for_backend(backend, f_src):
+    sptr = open(f_src, 'w')
+    f_src.write("""
 #include <cinttypes>
+
+template <typename t>
+struct base_d_pr {
+    t base, d;
+};
 """)
-    sptr.write('#include "tiny_exp.h"\n#include <bit>\n')
     for E, M in em_pairs:
         Mdivs = 2 ** M
         Eoff = (2 ** (E - 1)) - 1
@@ -88,12 +97,26 @@ if __name__ == "__main__":
         x_e_max = int(np.log2(2 ** (E - 1) * np.log(2)))
         # this is probably good enough
         x_e_min = -x_e_max-1
-        cdat_ty = f"uint{int(2**np.ceil(np.log2(1+E+M)))}_t"
-        cdat_unsigned = cdat_ty[1:]
-        cdat_ty_fused = f"uint{int(2*2**np.ceil(np.log2(1+E+M)))}_t"
-        cdat_ty_large = f"uint{int(2**np.ceil(np.log2(1+E+2*M)))}_t"
-        ftype = "__fp16" if cdat_ty == "uint16_t" else "float"
-        lookup_str = f"""const {cdat_ty_fused} lookup[2][{x_e_max - x_e_min + 1}] = {{"""
+        if backend == Backend.CPU:
+            cdat_ty = f"int{int(2**np.ceil(np.log2(1+E+M)))}_t"
+            cdat_ty_large = f"int{int(2**np.ceil(np.log2(1+E+2*M)))}_t"
+            array_annot = 'const'
+        elif backend == Backend.CUDA:
+            raise Exception("CUDA NOT IMPLEMENTED YET")
+        elif backend == Backend.METAL:
+            array_annot = 'constant'
+            l = E+M+1
+            if l == 8:
+                cdat_ty = 'char4'
+                cdat_ty_large = 'short4'
+            elif l == 16:
+                cdat_ty = 'short4'
+                cdat_ty_large = 'int4'
+            elif l == 32:
+                cdat_ty = 'int4'
+                cdat_ty_large = 'long4'
+
+        lookup_str = f"""{array_annot} base_d_pr<{cdat_ty}> lookup[2][{x_e_max - x_e_min + 1}] = {{"""
         d_lookup = {}
         b_lookup = {}
         for sign in [0, 1]:
@@ -116,7 +139,7 @@ if __name__ == "__main__":
                 d_lookup[(sign, x_)] = d
                 print(sign, x_, d)
                 delta = int(np.abs(d) * Mdivs)
-                lookup_str += hex(delta) + q[2:]
+                lookup_str += "{" + q + "," + hex(delta) + "}"
                 if x_ != x_e_max-1:
                     lookup_str += ", "
             lookup_str += "}"
@@ -129,16 +152,18 @@ if __name__ == "__main__":
         ONE = hex(((2**(E-1))-1)*(2**M))
         DSHAMT = int(2**np.ceil(np.log2(1+E+M)))
         BMASK = int(2 ** DSHAMT - 1)
+        ftype = "__fp16" if cdat_ty == "uint16_t" else "float"
         sptr.write(f"""
 namespace fpE{E}M{M} {{
 template<>
 {cdat_ty} tiny_exp<{cdat_ty}>(const {cdat_ty} &as_bit) {{
     {cdat_ty} S = as_bit >> {E+M};
     {cdat_ty} E = (as_bit >> {M}) & {EMASK};
-    if (E >= {x_e_max+Eoff}) {{
+    if (E >= {x_e_max+Eoff}) [[unlikely]] {{
         if (S) return 0;
         else return {hex(((2**E)-1)*2**M)};
-    }} else if (E < {x_e_min+Eoff}) {{
+    }}
+    if (E < {x_e_min+Eoff}) [[unlikely]] {{
         return {ONE};
     }}
     {cdat_ty} Enorm = E - {x_e_min + Eoff};
@@ -146,11 +171,7 @@ template<>
     {cdat_ty_large} D = fused >> {DSHAMT};
     {cdat_ty} base = fused & {hex(BMASK)};
     {cdat_ty_large} M = (as_bit & {MMASK}) * D;
-    if (S) {{
-        return base - static_cast<{cdat_ty}>(M >> {M});
-    }} else {{
-        return base + static_cast<{cdat_ty}>(M >> {M});
-    }}
+    return base + (1 - (S << 1)) * static_cast<{cdat_ty}>(M >> {M});
 }}
 template<>
 float tiny_exp<float>(const float &f) {{
