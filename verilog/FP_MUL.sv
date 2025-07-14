@@ -25,7 +25,7 @@ fpnew_top #(
 ) top (
   .clk_i(clk),
   .rst_ni(!rst),
-  .operands_i('{inA, inB, 0}),
+  .operands_i({16'b0, inB, inA}),
   .rnd_mode_i(fpnew_pkg::RNE),
   .op_i(fpnew_pkg::MUL),
   .op_mod_i(0),
