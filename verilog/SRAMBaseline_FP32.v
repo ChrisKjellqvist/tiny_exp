@@ -33,8 +33,8 @@ assign sram_lo_idx = {E_adj, M_lo, S};
 wire is_big = E >= (127 + Emax);
 wire is_small = E < (127 + Emin);
 
-wire [15:0] EXTREME = {1'b0, {8{!S}}, 23'b0};
-wire [15:0] ONE = 32'h3f800000;
+wire [31:0] EXTREME = {1'b0, {8{!S}}, 23'b0};
+wire [31:0] ONE = 32'h3f800000;
 
 wire [31:0] approx;
 FP_MUL_FP32 mul(
