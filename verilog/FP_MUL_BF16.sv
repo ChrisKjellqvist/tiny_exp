@@ -1,4 +1,4 @@
-module FP_MUL(
+module FP_MUL_BF16(
   input clk,
   input rst,
   input [15:0] inA,
@@ -25,7 +25,7 @@ fpnew_top #(
 ) top (
   .clk_i(clk),
   .rst_ni(!rst),
-  .operands_i({16'b0, inB, inA}),
+  .operands_i({inA, inB, inA}),
   .rnd_mode_i(fpnew_pkg::RNE),
   .op_i(fpnew_pkg::MUL),
   .op_mod_i(0),
