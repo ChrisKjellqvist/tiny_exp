@@ -3,12 +3,9 @@ import numpy as np
 import torch as to
 import math as ma
 
-mantissa_wid = 8
+# mantissa_used_as_index = 0
+mantissa_wid = 14
 mantissa_tot = 1 << mantissa_wid
-
-def quantize_7(x):
-    return int(x * mantissa_tot) / mantissa_tot
-
 
 htable = {'0': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6,
           '7': 7, '8': 8, '9': 9, 'a': 10, 'b': 11, 'c': 12, 'd': 13,
@@ -40,7 +37,6 @@ def sig(x):
 
 f = exp
 SIGN = lambda __x:  __x
-
 x_e_min = -7
 x_e_max = 6
 
@@ -53,8 +49,6 @@ if plot_approx:
 else:
     dot_size = 0
 
-
-
 def hex2int(h, acc=0): 
     if len(h) == 0:
         return acc
@@ -62,38 +56,50 @@ def hex2int(h, acc=0):
         return hex2int(h[1:], 16 * acc + htable[h[0]])
 
 shamt = 0 if mantissa_wid % 4 == 0 else 4 - (mantissa_wid % 4)
-def unpack_float(q):
+if mantissa_wid % 4 == 0:
+    hex_digs = mantissa_wid 
+else:
+    hex_digs = (mantissa_wid + shamt)//4
+
+def zeropad_shift_and_hexify_mantissa(q):
+    assert q >= 0
+    q_shift = q << shamt
+    hx = hex(q_shift)[2:]
+    if len(hx) < hex_digs:
+        hx = '0'* (hex_digs - len(hx)) + hx
+    return hx
+    
+def unpack_float(q, verbose=False):
     sign = q < 0
     h = float(q).hex()
     dot = h.find('.')
     pspot = h.find('p')
-    mantissa = h[dot + 1:min(dot + 3, pspot)]
-    mantissa = (hex2int(mantissa) // (1 << shamt)) / mantissa_tot
+    mantissa = h[dot + 1:min(dot + hex_digs+1, pspot)]
+    if verbose:
+        print(hex_digs, " ", mantissa)
+    inty = hex2int(mantissa)
+    mantissa = (inty // (1 << shamt)) / mantissa_tot
     exponent = int(h[h.find('p') + 1:])
+    if verbose:
+        print(f"{q} -> {h}, {inty}, {(sign,exponent,mantissa)}")
     return sign, exponent, mantissa
 
 def repack_float(s, e, m, verbose=False):
     s_str = "-" if s else ""
     # align 4 to align with python's float hex string format
-    m_big = m * mantissa_tot * (1 << shamt)
+    m_big = m * mantissa_tot
     m_int = int(m_big) + (1 if m_big - int(m_big) > 0.5 else 0)
-    print(e, " ", m, " -> ", m_int)
-    q = hex(m_int)[2:]
-    if len(q) == 1:
-        q = "0" + q
+    q = zeropad_shift_and_hexify_mantissa(m_int)
     m_str = "1." + q
     flt = f"{s_str}{m_str}p{int(e)}"
     if verbose:
-        print(flt)
+        print((s, e, m), " -> ", flt, " ", float.fromhex(flt))
     return float.fromhex(flt)
 
 
 def x_map(x):
-    s, e, m = unpack_float(x)
-    if s:
-        return e + m
-    else:
-        return e + m
+    _, e, m = unpack_float(x)
+    return e+m
 
 
 def x_map_ar(x):
@@ -121,14 +127,13 @@ for x_ in range(x_e_min, x_e_max + 1):
     else:
         print(f"assign OFFSETS[{0 if SIGN(-1)<0 else 1}][{x_-x_e_min:2d}] = 26'h{hex(diff_int)[2:]};")
 
-for x_ in range(x_e_min, x_e_max  + 1):
-    _, e, m = unpack_float(f(SIGN(2 ** x_)))
-    q = hex((int(e) + mantissa_tot - 1) * mantissa_tot + int(m * mantissa_tot))[2:]
-    print(x_, ": ", e, m * mantissa_tot, f"16'h{q}")
+# for x_ in range(x_e_min, x_e_max  + 1):
+#     _, e, m = unpack_float(f(SIGN(2 ** x_)))
+#     q = hex((int(e) + mantissa_tot - 1) * mantissa_tot + int(m * mantissa_tot))[2:]
+#     print(x_, ": ", e, m * mantissa_tot, f"16'h{q}")
 
-for key in d_lookup.keys():
-    print(key, ": ", d_lookup[key] * mantissa_tot)
-
+# for key in d_lookup.keys():
+#     print(key, ": ", d_lookup[key] * mantissa_tot)
 
 def get_approx(x):
     _, e, m = unpack_float(x)
@@ -137,13 +142,16 @@ def get_approx(x):
         su += d_lookup[i]
     su += d_lookup[e] * m
     assert (m < 1)
-    e_app = np.floor(lim_y_e + su)
     whole = su * mantissa_tot
     int_whole = int(whole)
     rem = whole - int_whole
     m_app = int(int_whole % mantissa_tot) + (1 if rem >= 0.5 else 0)
+    if m_app < mantissa_tot:
+        e_app = np.floor(lim_y_e + su)
+        return False, e_app, m_app
+    else:
+        return False, np.floor(lim_y_e + su) + 1, 0
     # print("APPROX: ", e_app, m_app)
-    return False, e_app, m_app
 
 
 def plot_discontinuous_f_on(x, fapprox, fgold):
@@ -191,12 +199,13 @@ def plot_discontinuous_f_on(x, fapprox, fgold):
     base_line = None
 
     for x_i in x:
-        x_i_s, x_i_e, x_i_m = unpack_float(x_i)
-        x_i_rnd = repack_float(x_i_s, x_i_e, x_i_m)
+        x_i_s, x_i_e, x_i_m = unpack_float(x_i, verbose=False)
+        x_i_rnd = repack_float(x_i_s, x_i_e, x_i_m, verbose=False)
+        # assert abs(x_i - x_i_rnd) <= (1 << x_i_e) / (1 << mantissa_wid)
         y_gold = fgold(x_i_rnd)
         _, e_approx, m_approx = fapprox(x_i_rnd)
         s, e_gold, m_gold = unpack_float(y_gold)
-        y_approx = repack_float(s, e_approx, m_approx / mantissa_tot, verbose=True)
+        y_approx = repack_float(s, e_approx, m_approx / mantissa_tot)
         diff_bits = np.abs((e_approx + m_approx / mantissa_tot) - (e_gold + m_gold))
 
         err_rel = 100 * np.abs(y_approx - y_gold)/y_gold
@@ -271,10 +280,7 @@ def plot_discontinuous_f_on(x, fapprox, fgold):
 x = []
 for i in range(x_e_min, x_e_max + 1):
     for j in range(mantissa_tot):
-        if j % 4 == 0:
-            h = f"0x1.{hex(j)[2:]}p{i}"
-        else:
-            h = f"0x1.{hex(j << (4 - (j % 4)))[2:]}p{i}"
+        h = f"0x1.{zeropad_shift_and_hexify_mantissa(j)}p{i}"        
         f_ = float.fromhex(h)
         x.append(SIGN(f_))
 
@@ -324,5 +330,6 @@ if __name__ == "__main__":
         ax4.set_xlabel(sublabels[i+1])
     plot_discontinuous_f_on(x, get_approx, f)
     fig.tight_layout()
-    fig.savefig('nonlinear-figs1.pdf')
+    ending = "pdf" if mantissa_wid < 10 else "png"
+    fig.savefig(f'nonlinear-figs1.{ending}')
     

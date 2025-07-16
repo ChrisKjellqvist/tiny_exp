@@ -52,3 +52,4 @@ sram_vcs:
 		cvfpu/common_cells/src/cf_math_pkg.sv \
 		cvfpu/fpnew_pkg.sv \
 		SRAMBaseline_FP32.v
+ 

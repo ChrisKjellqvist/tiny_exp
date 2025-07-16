@@ -44,7 +44,7 @@ module fpnew_top #(
   // Input Handshake
   input  logic                              in_valid_i,
   output logic                              in_ready_o,
-  input  logic                              flush_i,
+  input  logic                                flush_i,
   // Output signals
   output logic [WIDTH-1:0]                  result_o,
   output fpnew_pkg::status_t                status_o,
