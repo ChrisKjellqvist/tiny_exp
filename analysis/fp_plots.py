@@ -3,8 +3,8 @@ import numpy as np
 import torch as to
 import math as ma
 
-# mantissa_used_as_index = 0
-mantissa_wid = 14
+mantissa_used_as_index = 8
+mantissa_wid = 23
 mantissa_tot = 1 << mantissa_wid
 
 htable = {'0': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6,
@@ -30,9 +30,6 @@ def sin(x):
 
 def sig(x):
     return gen_htan(x, 1, 1, 0, 0)
-
-# proposed uarch:
-#   FLOAT( LUT_base[E] + M * LUT_off[E] ) + MUX(?, REG, 0)
 
 
 f = exp
@@ -109,23 +106,30 @@ def x_map_ar(x):
 _, lim_y_e, lim_y_m = unpack_float(f(SIGN(2 ** x_e_min)))
 d_lookup = {}
 for x_ in range(x_e_min, x_e_max + 1):
-    _, flo_e, flo_m = unpack_float(f(SIGN(2 ** x_)))
-    _, fhi_e, fhi_m = unpack_float(f(SIGN(2 ** (x_ + 1))))
-    diff_frac = fhi_e - flo_e + fhi_m - flo_m
-    diff_large = diff_frac * mantissa_tot
-    diff_int = int(diff_large)
-    d_lookup[x_] = diff_frac
-    BASE_FLT = hex((int(flo_e) + (mantissa_tot-1)) * mantissa_tot + int(flo_m * mantissa_tot))[2:]
-    if diff_int > 0:
-        OFFSET_SZ = ma.log2(abs(diff_int))
-        OFFSET_SZ_RND = int(ma.ceil(OFFSET_SZ))
-        print(f"// {OFFSET_SZ_RND}-bits")
-    L = 1 + 8 + mantissa_wid
-    print(f"assign BASES  [{0 if SIGN(-1)<0 else 1}][{x_-x_e_min:2d}] = 16'h{BASE_FLT};")
-    if SIGN(-1)>0:
-        print(f"assign OFFSETS[{0 if SIGN(-1)<0 else 1}][{x_-x_e_min:2d}] = ~(26'h{hex(diff_int)[3:]})+1;")
-    else:
-        print(f"assign OFFSETS[{0 if SIGN(-1)<0 else 1}][{x_-x_e_min:2d}] = 26'h{hex(diff_int)[2:]};")
+    for m_ in range(0, 1<<mantissa_used_as_index):
+        current = SIGN((2 ** x_)*(1.0 + m_ / (1 << mantissa_used_as_index)))
+        if m_ == (1 << mantissa_used_as_index) - 1:
+            next = SIGN(2 ** (x_ + 1))
+        else:
+            next = SIGN((2 ** x_)*(1.0 + (m_+1) / (1 << mantissa_used_as_index)))
+        _, flo_e, flo_m = unpack_float(f(current))
+        _, fhi_e, fhi_m = unpack_float(f(next))
+        print(current, " ", next)
+        diff_frac = fhi_e - flo_e + fhi_m - flo_m
+        diff_large = diff_frac * (mantissa_tot << mantissa_used_as_index)
+        diff_int = int(diff_large)
+        d_lookup[(x_, m_)] = (diff_large, (flo_e, flo_m * mantissa_tot))
+        BASE_FLT = hex((int(flo_e) + (mantissa_tot-1)) * mantissa_tot + int(flo_m * mantissa_tot))[2:]
+        if diff_int > 0:
+            OFFSET_SZ = ma.log2(abs(diff_int))
+            OFFSET_SZ_RND = int(ma.ceil(OFFSET_SZ))
+            print(f"// {OFFSET_SZ_RND}-bits")
+        L = 1 + 8 + mantissa_wid
+        print(f"assign BASES  [{0 if SIGN(-1)<0 else 1}][{x_-x_e_min:2d}] = 16'h{BASE_FLT};")
+        if SIGN(-1)>0:
+            print(f"assign OFFSETS[{0 if SIGN(-1)<0 else 1}][{x_-x_e_min:2d}] = ~(26'h{hex(diff_int)[3:]})+1;")
+        else:
+            print(f"assign OFFSETS[{0 if SIGN(-1)<0 else 1}][{x_-x_e_min:2d}] = 26'h{hex(diff_int)[2:]};")
 
 # for x_ in range(x_e_min, x_e_max  + 1):
 #     _, e, m = unpack_float(f(SIGN(2 ** x_)))
@@ -137,21 +141,20 @@ for x_ in range(x_e_min, x_e_max + 1):
 
 def get_approx(x):
     _, e, m = unpack_float(x)
-    su = lim_y_m
-    for i in range(x_e_min, e):
-        su += d_lookup[i]
-    su += d_lookup[e] * m
-    assert (m < 1)
-    whole = su * mantissa_tot
+    top_m = int(m * mantissa_tot) >> (mantissa_wid-mantissa_used_as_index)
+    delta, (base_e, base_m) = d_lookup[(e, top_m)]
+    sub_correct_for_extra_mantissa = (1 / (1 << mantissa_used_as_index)) * top_m
+    # print(top_m, " ", sub_correct_for_extra_mantissa, " ", m)
+    delta_m = m - sub_correct_for_extra_mantissa 
+    whole = delta * delta_m + base_m
     int_whole = int(whole)
     rem = whole - int_whole
     m_app = int(int_whole % mantissa_tot) + (1 if rem >= 0.5 else 0)
+    e_app = base_e + int_whole // mantissa_tot
     if m_app < mantissa_tot:
-        e_app = np.floor(lim_y_e + su)
         return False, e_app, m_app
     else:
-        return False, np.floor(lim_y_e + su) + 1, 0
-    # print("APPROX: ", e_app, m_app)
+        return False, e_app + 1, 0
 
 
 def plot_discontinuous_f_on(x, fapprox, fgold):
@@ -274,12 +277,14 @@ def plot_discontinuous_f_on(x, fapprox, fgold):
     print(f"L1: {errl1 / N}")
     print(f"L2: {(err ** .5) / N}")
     print(f"Tested on {N} points")
+    print(f"Highest relative error: {biggest_diff}%")
     # print(f"biggest diff f({SIGN(x_i):.03f}) = GOLD[{y_gold:.03f}], ~[{y_approx:.03f}], ERR[{err_rel:.03f}]")
 
 
 x = []
+skip_by = 1 if mantissa_wid < 12 else 1<< (mantissa_wid - 12)
 for i in range(x_e_min, x_e_max + 1):
-    for j in range(mantissa_tot):
+    for j in range(0, mantissa_tot, skip_by):
         h = f"0x1.{zeropad_shift_and_hexify_mantissa(j)}p{i}"        
         f_ = float.fromhex(h)
         x.append(SIGN(f_))
