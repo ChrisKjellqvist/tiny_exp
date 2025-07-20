@@ -11,7 +11,7 @@ fpnew_top #(
       EnableVectors: 0,
       EnableNanBox: 0,
       FpFmtMask: 1,
-      IntFmtMask: 0
+      IntFmtMask: 1
     }),
     .Implementation('{
       PipeRegs: '{default: 0},

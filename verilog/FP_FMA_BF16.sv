@@ -4,9 +4,7 @@ module FP_FMA_BF16(
   input [15:0] in_mul0,
   input [15:0] in_mul1,
   input [15:0] in_add,
-  input in_valid,
-  output [15:0] out
-  output out_valid
+  output [15:0] out,
 );
 
 fpnew_top #(
@@ -38,13 +36,13 @@ fpnew_top #(
   .vectorial_op_i(0),
   .tag_i(0),
   .simd_mask_i(1),
-  .in_valid_i(in_valid),
+  .in_valid_i(),
   .in_ready_o(),
   .flush_i(0),
   .result_o(out),
   .status_o(),
   .tag_o(),
-  .out_valid_o(out_valid),
+  .out_valid_o(),
   .out_ready_i(1),
   .busy_o()
 );

@@ -7,7 +7,7 @@ module cheby_BF16(
     output out_valid,
     input out_ready,
     output [15:0] out_data
-)
+);
 `include "cheby_poly.v"
 
 localparam S_IDLE = 0;
@@ -74,7 +74,7 @@ always @(posedge clk) begin
             end
         end else if (state == S_REPLY) begin
             if (out_ready) begin
-                state <= S_IDLE
+                state <= S_IDLE;
             end
         end
     end
