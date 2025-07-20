@@ -4,7 +4,7 @@ module FP_FMA_BF16(
   input [15:0] in_mul0,
   input [15:0] in_mul1,
   input [15:0] in_add,
-  output [15:0] out,
+  output [15:0] out
 );
 
 fpnew_top #(
@@ -12,8 +12,8 @@ fpnew_top #(
       Width: 16,
       EnableVectors: 0,
       EnableNanBox: 0,
-      FpFmtMask: 1,
-      IntFmtMask: 0
+      FpFmtMask: 5'b1,
+      IntFmtMask: 5'b1
     }),
     .Implementation('{
       PipeRegs: '{default: 0},
@@ -26,7 +26,7 @@ fpnew_top #(
 ) top (
   .clk_i(clk),
   .rst_ni(!rst),
-  .operands_i({inA, inB, in_add}),
+  .operands_i({in_mul0, in_mul1, in_add}),
   .rnd_mode_i(fpnew_pkg::RNE),
   .op_i(fpnew_pkg::FMADD),
   .op_mod_i(0),
@@ -36,7 +36,7 @@ fpnew_top #(
   .vectorial_op_i(0),
   .tag_i(0),
   .simd_mask_i(1),
-  .in_valid_i(),
+  .in_valid_i(1),
   .in_ready_o(),
   .flush_i(0),
   .result_o(out),

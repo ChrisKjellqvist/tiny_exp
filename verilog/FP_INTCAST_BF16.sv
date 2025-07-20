@@ -10,8 +10,8 @@ fpnew_top #(
       Width: 16,
       EnableVectors: 0,
       EnableNanBox: 0,
-      FpFmtMask: 1,
-      IntFmtMask: 1
+      FpFmtMask: 5'b11111,
+      IntFmtMask: 5'b11111
     }),
     .Implementation('{
       PipeRegs: '{default: 0},

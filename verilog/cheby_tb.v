@@ -1,5 +1,3 @@
-`timescale 1ns/1ps
-
 module TestBench();
 
 reg in_valid;
@@ -31,6 +29,10 @@ initial begin
     $dumpvars(0);
     clk = 0;
     rst = 1;
+    out_ready = 0;
+    in_data = 0;
+    in_valid = 0;
+
     for (i=0;i<10;i=i+1) begin
         #1 clk = !clk;
     end
@@ -43,16 +45,27 @@ initial begin
     in_data = 16'h3f80;
     while (in_ready == 0) begin
         i = i + 1;
+        #1 clk = ~clk;
+        #1 clk = ~clk;
         $display("Waited %d cycles for in_ready", i);
-        #1;
+	if (i>1000) begin
+		$finish();
+	end
     end
+    #1 clk = ~clk;
+    #1 clk = ~clk;
+    in_valid = 0;
 
+    #1 clk = ~clk;
+    #1 clk = ~clk;
     out_ready = 1;
     for (i=0;i<10;i=i+1) begin
         if (out_valid) begin
-            $display("Received %08x", out_data);
+            $display("Received %04x", out_data);
             $finish();
         end
+        #1 clk = ~clk;
+        #1 clk = ~clk;
     end
 end
 

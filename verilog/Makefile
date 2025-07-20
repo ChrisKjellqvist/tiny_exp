@@ -92,8 +92,8 @@ sram_vcs_bf16:
 
 cheby:
 	vcs $(FLAGS_FPU) \
-		cheby_BF16.v \
 		./FP_MUL_BF16.sv \
 		./FP_INTCAST_BF16.sv \
 		./FP_FMA_BF16.sv \
-		testbench_cheby.v
+		./cheby_BF16.v \
+		cheby_tb.v

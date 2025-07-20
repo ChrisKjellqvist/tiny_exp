@@ -20,7 +20,7 @@ assign out_valid = state == S_REPLY;
 
 reg [15:0] sq_acc;
 reg [15:0] res_acc;
-assign out_date = res_acc;
+assign out_data = res_acc;
 reg [15:0] x_reg;
 reg [15:0] x_int_reg;
 reg [1:0] poly_count;
@@ -41,11 +41,12 @@ FP_FMA_BF16 fma(
     .rst(rst),
     .in_mul0(constants[poly_count][x_int_reg]),
     .in_mul1(sq_acc),
-    .in_add(res_update)
+    .in_add(res_acc),
+    .out(res_update)
 );
 
 wire [15:0] mul_result;
-FP_MUL_FP32 mul(
+FP_MUL_BF16 mul(
     .clk(clk),
     .rst(rst),
     .inA(sq_acc),
@@ -62,8 +63,9 @@ always @(posedge clk) begin
                 x_reg <= in_data;
                 x_int_reg <= x_int_adj;
                 state <= S_WORK;
-                sq_acc <= 1;
+                sq_acc <= 16'h3f80;
                 poly_count <= 0;
+		res_acc <= 0;
             end
         end else if (state == S_WORK) begin
             poly_count <= poly_count + 1;
