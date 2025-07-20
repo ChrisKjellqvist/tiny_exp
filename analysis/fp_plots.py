@@ -2,10 +2,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch as to
 import math as ma
+import enum
 
-mantissa_used_as_index = 8
+mantissa_used_as_index = 0
 mantissa_wid = 23
 mantissa_tot = 1 << mantissa_wid
+e_wid:int = 8
+
+class Flavor(enum.Enum):
+    CPP = 0
+    VERILOG = 1
 
 htable = {'0': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6,
           '7': 7, '8': 8, '9': 9, 'a': 10, 'b': 11, 'c': 12, 'd': 13,
@@ -20,10 +26,13 @@ def gen_htan(x, L, k, c, z):
 
 
 def silu(x):
-    return gen_htan(x, L=1, k=1, c=0, z=0)
+    return gen_htan(x, L=1, k=1, c=0, z=0)  
 
 def htan(x):
     return gen_htan(x, L=2, k=2, c=0, z=1)
+
+def gelu_sig(x):
+    return gen_htan(x, 1, 1.6, 0, 0)
 
 def sin(x):
     return np.exp(-(x**2))
@@ -34,12 +43,19 @@ def sig(x):
 
 f = exp
 SIGN = lambda __x:  __x
-x_e_min = -7
-x_e_max = 6
+x_e_min = 1
+x_e_max = 1
 
 plot_chart = True
 plot_err = True
 plot_approx = True
+flavor=Flavor.CPP
+cpp_bases = ""
+cpp_offsets = ""
+
+if flavor==Flavor.CPP:
+    cpp_bases = "const int32_t bases[] = {"
+    cpp_offsets = "const int64_t offsets[] = {"
 
 if plot_approx:
     dot_size = 4
@@ -103,6 +119,14 @@ def x_map_ar(x):
     return np.array([x_map(xp) for xp in x])
 
 
+def to_flt_hex_str(e, m):
+    flt_adjusted_e: int = int(e) + ((1 << (e_wid-1))-1)
+    flt_adjusted_e_shift: int = flt_adjusted_e << mantissa_wid
+    flt_adjusted_m: int = int(m*mantissa_tot)
+    flt_combined_raw: int = flt_adjusted_e_shift | flt_adjusted_m
+    return hex(flt_combined_raw)[2:]
+
+
 _, lim_y_e, lim_y_m = unpack_float(f(SIGN(2 ** x_e_min)))
 d_lookup = {}
 for x_ in range(x_e_min, x_e_max + 1):
@@ -114,22 +138,58 @@ for x_ in range(x_e_min, x_e_max + 1):
             next = SIGN((2 ** x_)*(1.0 + (m_+1) / (1 << mantissa_used_as_index)))
         _, flo_e, flo_m = unpack_float(f(current))
         _, fhi_e, fhi_m = unpack_float(f(next))
-        print(current, " ", next)
+        # print(current, " ", next)
         diff_frac = fhi_e - flo_e + fhi_m - flo_m
         diff_large = diff_frac * (mantissa_tot << mantissa_used_as_index)
         diff_int = int(diff_large)
         d_lookup[(x_, m_)] = (diff_large, (flo_e, flo_m * mantissa_tot))
-        BASE_FLT = hex((int(flo_e) + (mantissa_tot-1)) * mantissa_tot + int(flo_m * mantissa_tot))[2:]
+
+        BASE_FLT = to_flt_hex_str(flo_e, flo_m)
+
         if diff_int > 0:
             OFFSET_SZ = ma.log2(abs(diff_int))
             OFFSET_SZ_RND = int(ma.ceil(OFFSET_SZ))
-            print(f"// {OFFSET_SZ_RND}-bits")
         L = 1 + 8 + mantissa_wid
-        print(f"assign BASES  [{0 if SIGN(-1)<0 else 1}][{x_-x_e_min:2d}] = 16'h{BASE_FLT};")
-        if SIGN(-1)>0:
-            print(f"assign OFFSETS[{0 if SIGN(-1)<0 else 1}][{x_-x_e_min:2d}] = ~(26'h{hex(diff_int)[3:]})+1;")
-        else:
-            print(f"assign OFFSETS[{0 if SIGN(-1)<0 else 1}][{x_-x_e_min:2d}] = 26'h{hex(diff_int)[2:]};")
+        if flavor == Flavor.VERILOG:
+            print(f"// {OFFSET_SZ_RND}-bits")
+            idx = 0 if SIGN(-1)<0 else 1
+            idx2 = x_-x_e_min
+            print(f"assign BASES  [{0 if SIGN(-1)<0 else 1}][{x_-x_e_min:2d}] = 16'h{BASE_FLT};")
+            if SIGN(-1)>0:
+                ans = hex(diff_int)[3:]
+            else:
+                ans = hex(diff_int)[2:]
+            if ans == "":
+                ans = "0"
+            if SIGN(-1)>0:
+                ans = f"~(26'h{ans})+1"
+            else:
+                ans = f"26'h{ans}"
+            print(f"assign OFFSETS[{idx}][{idx2:2d}] = {ans};")
+        elif flavor == Flavor.CPP:
+            assert mantissa_used_as_index == 0
+            idx = 0 if SIGN(-1)<0 else 1
+            idx2 = x_-x_e_min
+            comma = ", " if x_ != x_e_max else ""
+            cpp_bases += f"0x{BASE_FLT}{comma}"
+            if SIGN(-1)>0:
+                ans = hex(diff_int)[3:]
+            else:
+                ans = hex(diff_int)[2:]
+            if ans == "":
+                ans = "0"
+            ans = f"0x{ans}"
+            cpp_offsets += f"{ans}{comma}"
+if flavor == Flavor.CPP:
+    cpp_offsets += "};"
+    cpp_bases += "};"
+    at_zero = f(0)
+    _, e, m = unpack_float(at_zero)
+    print(e, ' ', m)
+    print(f"const int32_t default_at_0 = 0x{to_flt_hex_str(e, m)};")
+    print(cpp_bases)
+    print(cpp_offsets)
+
 
 # for x_ in range(x_e_min, x_e_max  + 1):
 #     _, e, m = unpack_float(f(SIGN(2 ** x_)))
@@ -312,7 +372,7 @@ if __name__ == "__main__":
         space_per_plot = 3.5
     if plot_err:
         nplots += 2
-    # fig, axs = plt.subplots(nplots, 1, figsize=(3.3, nplots * space_per_plot), dpi=800)
+    # fig, axs = plt.subplots(nplots, 1, figsize=(3.3, nplots * space_per_plot / 1.4), dpi=800)
     fig, axs = plt.subplots(1, nplots, figsize=(nplots * space_per_plot, 3), dpi=800)
 
     ############### EXP + #####################
@@ -336,5 +396,6 @@ if __name__ == "__main__":
     plot_discontinuous_f_on(x, get_approx, f)
     fig.tight_layout()
     ending = "pdf" if mantissa_wid < 10 else "png"
-    fig.savefig(f'nonlinear-figs1.{ending}')
+    print(f"WROTE TO nonlinear-figs1.{f.__name__}.{ending}")
+    fig.savefig(f'nonlinear-figs1.{f.__name__}.{ending}')
     
