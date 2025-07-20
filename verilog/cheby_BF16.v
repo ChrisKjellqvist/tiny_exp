@@ -2,7 +2,7 @@ module cheby_BF16(
     input clk,
     input rst,
     input in_valid,
-    input in_ready,
+    output in_ready,
     input [15:0] in_data,
     output out_valid,
     input out_ready,

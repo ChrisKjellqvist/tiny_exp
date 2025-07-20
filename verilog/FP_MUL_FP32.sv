@@ -11,12 +11,12 @@ fpnew_top #(
       Width: 32,
       EnableVectors: 0,
       EnableNanBox: 0,
-      FpFmtMask: 1,
+      FpFmtMask: 5'b10000,
       IntFmtMask: 0
     }),
     .Implementation('{
       PipeRegs: '{default: 0},
-      UnitTypes:  '{'{default: fpnew_pkg::PARALLEL}, // ADDMUL
+      UnitTypes:  '{'{default: fpnew_pkg::MERGED}, // ADDMUL
                     '{default: fpnew_pkg::DISABLED}, // DIVSQRT
                     '{default: fpnew_pkg::DISABLED}, // NONCOMP
                     '{default: fpnew_pkg::DISABLED}},// CONV
@@ -28,21 +28,21 @@ fpnew_top #(
   .operands_i({inA, inB, inA}),
   .rnd_mode_i(fpnew_pkg::RNE),
   .op_i(fpnew_pkg::MUL),
-  .op_mod_i(0),
+  .op_mod_i(1'b0),
   .src_fmt_i(fpnew_pkg::FP32),
   .dst_fmt_i(fpnew_pkg::FP32),
-  .int_fmt_i(fpnew_pkg::INT16),
-  .vectorial_op_i(0),
-  .tag_i(0),
-  .simd_mask_i(1),
-  .in_valid_i(1),
+  .int_fmt_i(fpnew_pkg::INT32),
+  .vectorial_op_i(1'b0),
+  .tag_i(),
+  .simd_mask_i(1'b0),
+  .in_valid_i(1'b1),
   .in_ready_o(),
-  .flush_i(0),
+  .flush_i(1'b0),
   .result_o(out),
   .status_o(),
   .tag_o(),
   .out_valid_o(),
-  .out_ready_i(1),
+  .out_ready_i(1'b1),
   .busy_o()
 );
 
