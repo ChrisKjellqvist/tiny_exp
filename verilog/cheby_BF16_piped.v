@@ -1,4 +1,4 @@
-module cheby_BF16(
+module cheby_BF16_piped(
     input clk,
     input rst,
     input [15:0] in_data,
@@ -7,7 +7,7 @@ module cheby_BF16(
 `include "cheby_poly.v"
 
 reg [15:0] sq_shreg [0:1]; // for x^2 and x^3
-reg [15:0] res_acc [0:2]; // for T1, T2, T3 (not T0)
+reg [15:0] res_acc [0:3]; // for T1, T2, T3 (not T0)
 assign out_date = res_acc[2];
 reg [15:0] x_shreg [0:3];
 reg [15:0] x_int_shreg [0:3];
@@ -29,7 +29,7 @@ FP_INTCAST_BF16 cast(
 );
 
 wire [15:0] sq1_res;
-FP_MUL_FP32 sq1(
+FP_MUL_BF16 sq1(
     .clk(clk),
     .rst(rst),
     .inA(x_shreg[1]),
@@ -37,12 +37,12 @@ FP_MUL_FP32 sq1(
     .out(sq1_res)
 );
 wire [15:0] sq2_res;
-FP_MUL_FP32 sq2(
+FP_MUL_BF16 sq2(
     .clk(clk),
     .rst(rst),
     .inA(sq_shreg[0]),
     .inB(x_shreg[2]),
-    .out(sq1_res)
+    .out(sq2_res)
 );
 
 wire [15:0] fma1_res;
@@ -66,7 +66,7 @@ FP_FMA_BF16 fma2(
 );
 
 wire [15:0] fma3_res;
-FP_FMA_BF16 fma2(
+FP_FMA_BF16 fma3(
     .clk(clk),
     .rst(rst),
     .in_mul0(chosen_constants[3]),

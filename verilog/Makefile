@@ -97,3 +97,10 @@ cheby:
 		./FP_FMA_BF16.sv \
 		./cheby_BF16.v \
 		cheby_tb.v
+chebyp:
+	vcs $(FLAGS_FPU) \
+		./FP_MUL_BF16.sv \
+		./FP_INTCAST_BF16.sv \
+		./FP_FMA_BF16.sv \
+		./cheby_BF16_piped.v \
+		chebyp_tb.v
